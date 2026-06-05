@@ -1,0 +1,1122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#1B3F6B">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="Smile Hub Clinics — Patient Management System">
+<title>Smile Hub Clinics</title>
+<link rel="manifest" href="manifest.json">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+:root {
+  --navy:#1B3F6B; --navy-dark:#122d4e; --navy-light:#2a5490;
+  --teal:#4BBFB0; --teal-light:#7dd4c8; --teal-dark:#35a090;
+  --bg:#f0f4f8; --card:#ffffff; --text:#1a2332; --text-muted:#6b7a8d;
+  --border:#e2e8f0; --red:#e53e3e; --orange:#dd6b20; --yellow:#d69e2e;
+  --green:#38a169; --blue:#3182ce; --purple:#805ad5;
+  --shadow:0 2px 12px rgba(27,63,107,0.10);
+  --shadow-lg:0 8px 32px rgba(27,63,107,0.16);
+  --radius:16px; --radius-sm:10px;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);overflow:hidden}
+#app{display:flex;flex-direction:column;height:100vh;max-width:480px;margin:0 auto;background:var(--bg);position:relative}
+
+/* LOGIN */
+#login-screen{
+  position:absolute;inset:0;background:linear-gradient(145deg,var(--navy-dark) 0%,var(--navy) 50%,var(--navy-light) 100%);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  z-index:1000;padding:40px 30px;text-align:center;
+}
+#login-screen::before{content:'';position:absolute;top:-80px;right:-60px;width:280px;height:280px;background:rgba(75,191,176,0.1);border-radius:50%}
+#login-screen::after{content:'';position:absolute;bottom:-60px;left:-40px;width:200px;height:200px;background:rgba(75,191,176,0.07);border-radius:50%}
+.login-logo{width:80px;height:80px;background:linear-gradient(135deg,var(--teal),var(--teal-light));border-radius:24px;display:flex;align-items:center;justify-content:center;font-size:38px;margin-bottom:24px;box-shadow:0 8px 32px rgba(75,191,176,0.4);position:relative;z-index:1}
+.login-title{font-family:'DM Serif Display',serif;font-size:32px;color:white;line-height:1.1;position:relative;z-index:1}
+.login-sub{font-size:13px;color:rgba(255,255,255,0.5);margin-top:6px;letter-spacing:2px;text-transform:uppercase;position:relative;z-index:1}
+.login-divider{width:40px;height:2px;background:rgba(75,191,176,0.4);margin:28px auto;position:relative;z-index:1}
+.login-desc{font-size:14px;color:rgba(255,255,255,0.65);line-height:1.6;max-width:280px;margin-bottom:32px;position:relative;z-index:1}
+.google-btn{
+  display:flex;align-items:center;gap:12px;
+  background:white;border:none;border-radius:14px;
+  padding:14px 24px;font-size:15px;font-weight:600;
+  color:var(--text);cursor:pointer;
+  box-shadow:0 6px 24px rgba(0,0,0,0.2);
+  transition:all 0.2s;position:relative;z-index:1;
+  font-family:'DM Sans',sans-serif;
+}
+.google-btn:hover{transform:translateY(-2px);box-shadow:0 10px 30px rgba(0,0,0,0.25)}
+.google-btn:active{transform:scale(0.97)}
+.google-btn img{width:22px;height:22px}
+.login-note{font-size:11px;color:rgba(255,255,255,0.35);margin-top:20px;position:relative;z-index:1}
+
+/* HEADER */
+.header{background:linear-gradient(135deg,var(--navy-dark) 0%,var(--navy) 60%,var(--navy-light) 100%);padding:16px 20px 20px;position:relative;overflow:hidden;flex-shrink:0}
+.header::before{content:'';position:absolute;top:-40px;right:-40px;width:160px;height:160px;background:rgba(75,191,176,0.12);border-radius:50%}
+.header-top{display:flex;justify-content:space-between;align-items:center;position:relative;z-index:1}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-icon{width:38px;height:38px;background:linear-gradient(135deg,var(--teal),var(--teal-light));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 4px 12px rgba(75,191,176,0.4)}
+.logo-text h1{font-family:'DM Serif Display',serif;font-size:17px;line-height:1.1;color:white;letter-spacing:-0.3px}
+.logo-text span{font-size:10px;color:rgba(255,255,255,0.6);letter-spacing:1.5px;text-transform:uppercase}
+.header-right{display:flex;align-items:center;gap:10px;position:relative;z-index:1}
+.header-date{color:rgba(255,255,255,0.7);font-size:11px;text-align:right}
+.header-date strong{display:block;color:white;font-size:14px;font-weight:600}
+.user-avatar{width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,0.15);border:1.5px solid rgba(255,255,255,0.3);display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden}
+.user-avatar img{width:100%;height:100%;object-fit:cover}
+.search-wrap{padding:0 20px 16px;position:relative;z-index:1;margin-top:14px}
+.search-box{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.15);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:10px 14px;cursor:pointer;transition:all 0.2s}
+.search-box:hover{background:rgba(255,255,255,0.22)}
+.search-box span{color:rgba(255,255,255,0.7);font-size:13px}
+
+/* CONTENT */
+.content{flex:1;overflow-y:auto;padding:16px 20px 80px;scroll-behavior:smooth}
+.content::-webkit-scrollbar{display:none}
+.section-title{font-size:11px;font-weight:700;letter-spacing:1.8px;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px;margin-top:18px}
+.section-title:first-child{margin-top:0}
+
+/* STATS */
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:6px}
+.stat-card{background:var(--card);border-radius:var(--radius-sm);padding:14px 12px;text-align:center;box-shadow:var(--shadow);border:1px solid var(--border);transition:transform 0.15s;cursor:pointer}
+.stat-card:active{transform:scale(0.97)}
+.stat-card .num{font-size:24px;font-weight:700;line-height:1}
+.stat-card .lbl{font-size:10px;color:var(--text-muted);margin-top:3px;font-weight:500;letter-spacing:0.5px}
+.stat-navy{color:var(--navy)}.stat-teal{color:var(--teal-dark)}.stat-red{color:var(--red)}
+
+/* LOADING */
+.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;color:var(--text-muted)}
+.spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--teal);border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:12px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* APPT CARDS */
+.appt-card{background:var(--card);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;box-shadow:var(--shadow);border:1px solid var(--border);display:flex;align-items:center;gap:14px;cursor:pointer;transition:all 0.2s;position:relative;overflow:hidden}
+.appt-card:active{transform:scale(0.98)}
+.appt-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:4px 0 0 4px}
+.appt-card.status-active::before{background:var(--teal)}
+.appt-card.status-unconfirmed::before{background:var(--yellow)}
+.appt-card.status-noshow::before{background:var(--red)}
+.appt-card.status-done::before{background:var(--green)}
+.appt-time{min-width:54px;text-align:center;background:var(--bg);border-radius:8px;padding:6px 8px}
+.appt-time .hour{font-size:15px;font-weight:700;color:var(--navy);line-height:1}
+.appt-time .ampm{font-size:9px;color:var(--text-muted);font-weight:600;letter-spacing:0.5px}
+.appt-info{flex:1;min-width:0}
+.appt-name{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.appt-sub{font-size:12px;color:var(--text-muted);margin-top:2px}
+.appt-mr{font-size:10px;font-weight:700;color:var(--teal-dark);background:rgba(75,191,176,0.1);padding:2px 7px;border-radius:20px;display:inline-block;margin-top:3px}
+.appt-actions{display:flex;flex-direction:column;gap:6px}
+.btn-icon{width:32px;height:32px;border-radius:8px;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;transition:all 0.15s}
+.btn-wa{background:rgba(37,211,102,0.12);color:#25d366}
+.btn-wa:active{background:rgba(37,211,102,0.25)}
+.btn-view{background:rgba(27,63,107,0.08);color:var(--navy)}
+.alert-dot{position:absolute;top:10px;right:10px;width:8px;height:8px;border-radius:50%;background:var(--red)}
+
+/* PATIENT CARDS */
+.search-result{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:var(--radius-sm);background:var(--card);margin-bottom:8px;cursor:pointer;border:1px solid var(--border);transition:all 0.15s}
+.search-result:active{transform:scale(0.98);background:var(--bg)}
+.result-avatar{width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,var(--navy),var(--navy-light));display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:15px;flex-shrink:0}
+.result-name{font-size:14px;font-weight:600}
+.result-sub{font-size:11px;color:var(--text-muted);margin-top:1px}
+
+/* PROFILE */
+.profile-header{background:linear-gradient(135deg,var(--navy-dark),var(--navy));border-radius:var(--radius);padding:20px;color:white;margin-bottom:14px;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.profile-header::after{content:'';position:absolute;right:-20px;top:-20px;width:100px;height:100px;background:rgba(75,191,176,0.15);border-radius:50%}
+.profile-avatar{width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,var(--teal),var(--teal-light));display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:white;margin-bottom:12px;position:relative;z-index:1}
+.profile-name{font-family:'DM Serif Display',serif;font-size:22px;position:relative;z-index:1}
+.profile-mr{font-size:11px;color:rgba(255,255,255,0.6);letter-spacing:1px;margin-top:2px;position:relative;z-index:1}
+.profile-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;position:relative;z-index:1}
+.tag{font-size:10px;font-weight:600;padding:3px 9px;border-radius:20px;letter-spacing:0.5px}
+.tag-teal{background:rgba(75,191,176,0.2);color:var(--teal-light)}
+.tag-red{background:rgba(229,62,62,0.2);color:#fc8181}
+.tag-yellow{background:rgba(214,158,46,0.2);color:#f6c05e}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.info-item{background:var(--card);border-radius:var(--radius-sm);padding:12px 14px;box-shadow:var(--shadow);border:1px solid var(--border)}
+.info-label{font-size:10px;color:var(--text-muted);font-weight:600;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:3px}
+.info-value{font-size:14px;font-weight:600;color:var(--text)}
+
+/* DENTAL CHART */
+.chart-container{background:var(--card);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);border:1px solid var(--border);margin-bottom:14px}
+.chart-title{font-size:13px;font-weight:700;color:var(--navy);margin-bottom:12px;display:flex;justify-content:space-between;align-items:center}
+.chart-label{font-size:10px;color:var(--text-muted);font-weight:600;letter-spacing:1px;text-transform:uppercase;text-align:center;margin:4px 0}
+.teeth-row{display:flex;justify-content:center;gap:3px;margin:4px 0}
+.tooth{width:28px;height:32px;border-radius:6px 6px 8px 8px;border:1.5px solid var(--border);background:white;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:7px;font-weight:600;color:var(--text-muted);transition:all 0.15s;position:relative;user-select:none}
+.tooth:active{transform:scale(0.92)}
+.tooth.healthy{background:white;border-color:#e2e8f0}
+.tooth.caries{background:#c05621;border-color:#c05621;color:white}
+.tooth.filling-composite{background:#3182ce;border-color:#3182ce;color:white}
+.tooth.filling-amalgam{background:#2d3748;border-color:#2d3748;color:white}
+.tooth.rct{background:#e53e3e;border-color:#e53e3e;color:white}
+.tooth.crown{background:#d69e2e;border-color:#d69e2e;color:white}
+.tooth.implant{background:#805ad5;border-color:#805ad5;color:white}
+.tooth.extracted{background:#a0aec0;border-color:#a0aec0;color:white;opacity:0.7}
+.tooth.veneer{background:#38a169;border-color:#38a169;color:white}
+.tooth.watch{background:white;border-color:var(--orange);border-width:2px;color:var(--orange)}
+.tooth.bridge{background:#d69e2e;border-color:#d69e2e;color:white;border-style:dashed}
+.tooth.ortho{background:rgba(75,191,176,0.15);border-color:var(--teal);color:var(--teal-dark)}
+.tooth-num{font-size:6.5px;font-weight:700;opacity:0.8}
+.tooth-sym{font-size:10px;line-height:1}
+.divider-line{height:1px;background:var(--border);margin:6px 0}
+.chart-legend{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.legend-item{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text-muted)}
+.legend-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+
+/* TIMELINE */
+.timeline-item{display:flex;gap:12px;margin-bottom:12px;background:var(--card);border-radius:var(--radius-sm);padding:12px 14px;box-shadow:var(--shadow);border:1px solid var(--border);cursor:pointer;transition:all 0.15s}
+.timeline-item:active{transform:scale(0.98)}
+.timeline-dot{width:10px;height:10px;border-radius:50%;background:var(--teal);margin-top:4px;flex-shrink:0;box-shadow:0 0 0 3px rgba(75,191,176,0.15)}
+.timeline-date{font-size:10px;color:var(--text-muted);font-weight:600}
+.timeline-proc{font-size:14px;font-weight:600;color:var(--text);margin:2px 0}
+.timeline-doc{font-size:11px;color:var(--teal-dark)}
+.timeline-notes{font-size:11px;color:var(--text-muted);margin-top:4px;line-height:1.5}
+
+/* RECALLS */
+.recall-card{background:var(--card);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;box-shadow:var(--shadow);border:1px solid var(--border);display:flex;align-items:center;gap:12px;cursor:pointer;transition:all 0.15s}
+.recall-card:active{transform:scale(0.98)}
+.recall-badge{min-width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px}
+.recall-overdue{background:rgba(229,62,62,0.1)}
+.recall-soon{background:rgba(221,107,32,0.1)}
+.recall-upcoming{background:rgba(56,161,105,0.1)}
+.recall-info{flex:1}
+.recall-name{font-size:14px;font-weight:600}
+.recall-due{font-size:11px;color:var(--text-muted);margin-top:2px}
+.recall-status{font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px}
+.status-overdue{background:rgba(229,62,62,0.1);color:var(--red)}
+.status-soon{background:rgba(221,107,32,0.1);color:var(--orange)}
+.status-upcoming{background:rgba(56,161,105,0.1);color:var(--green)}
+
+/* FILTER */
+.filter-row{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:12px}
+.filter-row::-webkit-scrollbar{display:none}
+.filter-chip{flex-shrink:0;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:600;border:1.5px solid var(--border);background:var(--card);color:var(--text-muted);cursor:pointer;transition:all 0.15s;white-space:nowrap}
+.filter-chip.active{background:var(--navy);border-color:var(--navy);color:white}
+.filter-chip:active{transform:scale(0.96)}
+
+/* BOTTOM NAV */
+.bottom-nav{position:absolute;bottom:0;left:0;right:0;background:white;border-top:1px solid var(--border);display:flex;padding:8px 0 calc(8px + env(safe-area-inset-bottom));box-shadow:0 -4px 20px rgba(27,63,107,0.08);z-index:100}
+.nav-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 0;cursor:pointer;transition:all 0.15s;border:none;background:none}
+.nav-item:active{transform:scale(0.92)}
+.nav-icon{font-size:20px;transition:transform 0.2s}
+.nav-label{font-size:10px;font-weight:600;color:var(--text-muted);letter-spacing:0.3px}
+.nav-item.active .nav-icon{transform:scale(1.15)}
+.nav-item.active .nav-label{color:var(--navy);font-weight:700}
+.nav-dot{width:5px;height:5px;border-radius:50%;background:var(--teal);margin:0 auto;margin-top:1px;opacity:0;transition:opacity 0.2s}
+.nav-item.active .nav-dot{opacity:1}
+
+/* SCREENS */
+.screen{display:none}
+.screen.active{display:block}
+
+/* MODALS */
+.modal-overlay{position:absolute;inset:0;background:rgba(0,0,0,0.5);backdrop-filter:blur(4px);z-index:200;display:none;align-items:flex-end}
+.modal-overlay.open{display:flex}
+.modal{background:var(--bg);border-radius:24px 24px 0 0;width:100%;max-height:88vh;overflow-y:auto;padding:20px;animation:slideUp 0.3s cubic-bezier(0.34,1.56,0.64,1)}
+.modal::-webkit-scrollbar{display:none}
+@keyframes slideUp{from{transform:translateY(100%);opacity:0}to{transform:translateY(0);opacity:1}}
+.modal-handle{width:36px;height:4px;border-radius:2px;background:var(--border);margin:0 auto 16px}
+.modal-title{font-family:'DM Serif Display',serif;font-size:20px;color:var(--navy);margin-bottom:16px}
+
+/* TOOTH MODAL */
+.condition-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.condition-btn{padding:10px 6px;border-radius:10px;border:1.5px solid var(--border);background:white;cursor:pointer;text-align:center;font-size:11px;font-weight:600;transition:all 0.15s}
+.condition-btn:active{transform:scale(0.95)}
+
+/* SEARCH MODAL */
+.search-input{width:100%;padding:12px 16px;border-radius:12px;border:2px solid var(--border);font-size:15px;font-family:'DM Sans',sans-serif;outline:none;transition:border-color 0.2s;background:white;margin-bottom:12px}
+.search-input:focus{border-color:var(--teal)}
+
+/* FORM */
+.form-group{margin-bottom:14px}
+.form-label{font-size:11px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px;display:block}
+.form-input,.form-select{width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid var(--border);font-size:14px;font-family:'DM Sans',sans-serif;outline:none;background:white;transition:border-color 0.2s;color:var(--text)}
+.form-input:focus,.form-select:focus{border-color:var(--teal)}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+/* BUTTONS */
+.btn-primary{width:100%;padding:14px;border-radius:12px;border:none;background:linear-gradient(135deg,var(--navy),var(--navy-light));color:white;font-size:15px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all 0.15s;box-shadow:0 4px 14px rgba(27,63,107,0.3);margin-top:8px}
+.btn-primary:active{transform:scale(0.98);box-shadow:none}
+.btn-secondary{width:100%;padding:12px;border-radius:12px;border:1.5px solid var(--border);background:white;color:var(--text);font-size:14px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all 0.15s;margin-top:6px}
+.btn-secondary:active{background:var(--bg)}
+
+/* MISC */
+.empty-state{text-align:center;padding:40px 20px;color:var(--text-muted)}
+.empty-icon{font-size:48px;margin-bottom:12px}
+.empty-text{font-size:14px}
+.fab{position:absolute;bottom:72px;right:20px;width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,var(--teal-dark),var(--teal));border:none;color:white;font-size:24px;cursor:pointer;box-shadow:0 6px 20px rgba(75,191,176,0.45);display:flex;align-items:center;justify-content:center;z-index:50;transition:all 0.2s}
+.fab:active{transform:scale(0.92)}
+.alert-banner{background:rgba(229,62,62,0.1);border:1px solid rgba(229,62,62,0.2);border-radius:10px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--red);font-weight:500}
+.back-btn{display:flex;align-items:center;gap:6px;color:var(--navy);font-size:13px;font-weight:600;cursor:pointer;margin-bottom:14px;background:none;border:none;padding:0}
+.sync-bar{background:rgba(75,191,176,0.1);border:1px solid rgba(75,191,176,0.2);border-radius:10px;padding:8px 14px;margin-bottom:12px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--teal-dark);font-weight:500}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- LOGIN SCREEN -->
+<div id="login-screen">
+  <div class="login-logo">🦷</div>
+  <div class="login-title">Smile Hub</div>
+  <div class="login-sub">Clinics</div>
+  <div class="login-divider"></div>
+  <div class="login-desc">Patient management system for Smile Hub Clinics, Johar Town, Lahore</div>
+  <button class="google-btn" onclick="signInWithGoogle()">
+    <img src="https://www.google.com/favicon.ico" alt="Google">
+    Sign in with Google
+  </button>
+  <div class="login-note">Only authorized Smile Hub staff can access this system</div>
+</div>
+
+<!-- HEADER -->
+<div class="header" id="mainHeader" style="display:none">
+  <div class="header-top">
+    <div class="logo">
+      <div class="logo-icon">🦷</div>
+      <div class="logo-text">
+        <h1>Smile Hub</h1>
+        <span>Clinics</span>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="header-date" id="headerDate"></div>
+      <div class="user-avatar" id="userAvatar" onclick="signOut()" title="Sign out"></div>
+    </div>
+  </div>
+  <div class="search-wrap">
+    <div class="search-box" onclick="openSearch()">
+      <span>🔍</span>
+      <span>Search by name, MRN or phone...</span>
+    </div>
+  </div>
+</div>
+
+<!-- CONTENT -->
+<div class="content" id="mainContent" style="display:none">
+
+  <!-- DASHBOARD -->
+  <div class="screen active" id="screen-dashboard">
+    <div id="sync-status"></div>
+    <div class="section-title">Today's Overview</div>
+    <div class="stats-row">
+      <div class="stat-card" onclick="navTo('appointments')">
+        <div class="num stat-navy" id="stat-today">—</div>
+        <div class="lbl">Today</div>
+      </div>
+      <div class="stat-card" onclick="navTo('recalls')">
+        <div class="num stat-red" id="stat-recalls">—</div>
+        <div class="lbl">Recalls Due</div>
+      </div>
+      <div class="stat-card" onclick="navTo('patients')">
+        <div class="num stat-teal" id="stat-patients">—</div>
+        <div class="lbl">Patients</div>
+      </div>
+    </div>
+    <div class="section-title" style="margin-top:20px">Today's Schedule</div>
+    <div id="today-list"><div class="loading"><div class="spinner"></div>Loading schedule...</div></div>
+  </div>
+
+  <!-- APPOINTMENTS -->
+  <div class="screen" id="screen-appointments">
+    <div class="section-title">Appointments</div>
+    <div class="filter-row" id="appt-filter-row">
+      <div class="filter-chip active" onclick="filterAppts('all',this)">All</div>
+      <div class="filter-chip" onclick="filterAppts('active',this)">Confirmed</div>
+      <div class="filter-chip" onclick="filterAppts('unconfirmed',this)">Unconfirmed</div>
+      <div class="filter-chip" onclick="filterAppts('noshow',this)">No-Show</div>
+    </div>
+    <div id="appt-list"><div class="loading"><div class="spinner"></div>Loading...</div></div>
+  </div>
+
+  <!-- PATIENTS -->
+  <div class="screen" id="screen-patients">
+    <div class="section-title">Patient Directory</div>
+    <div id="patient-list"><div class="loading"><div class="spinner"></div>Loading patients...</div></div>
+  </div>
+
+  <!-- PATIENT PROFILE -->
+  <div class="screen" id="screen-profile">
+    <div id="profile-content"></div>
+  </div>
+
+  <!-- RECALLS -->
+  <div class="screen" id="screen-recalls">
+    <div class="section-title">Recall Dashboard</div>
+    <div class="filter-row">
+      <div class="filter-chip active" onclick="filterRecalls('all',this)">All</div>
+      <div class="filter-chip" onclick="filterRecalls('overdue',this)">🔴 Overdue</div>
+      <div class="filter-chip" onclick="filterRecalls('soon',this)">🟡 Due Soon</div>
+      <div class="filter-chip" onclick="filterRecalls('upcoming',this)">🟢 Upcoming</div>
+    </div>
+    <div id="recall-list"><div class="loading"><div class="spinner"></div>Loading...</div></div>
+  </div>
+
+  <!-- ADD PATIENT -->
+  <div class="screen" id="screen-add">
+    <div class="section-title">New Patient Registration</div>
+    <div class="form-group">
+      <label class="form-label">Visit Date</label>
+      <input class="form-input" type="date" id="f-date">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Patient Name</label>
+      <input class="form-input" type="text" id="f-name" placeholder="Full name">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">MR Number</label>
+        <input class="form-input" type="text" id="f-mr" readonly style="background:#f7fafc;color:var(--navy);font-weight:700">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Gender</label>
+        <select class="form-select" id="f-gender">
+          <option value="">Select</option>
+          <option>Male</option><option>Female</option><option>Other</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Phone Number</label>
+      <input class="form-input" type="tel" id="f-phone" placeholder="+92 300 0000000">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Date of Birth</label>
+        <input class="form-input" type="date" id="f-dob">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Treating Doctor</label>
+        <select class="form-select" id="f-doctor">
+          <option value="">Select</option>
+          <option>Dr. Abdullah</option><option>Dr. Athar</option>
+          <option>Dr. Hussain</option><option>Dr. Asim</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Treatment / Procedure</label>
+      <input class="form-input" type="text" id="f-treatment" placeholder="e.g. RCT, Scaling, Ortho">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Referred By</label>
+      <select class="form-select" id="f-referred">
+        <option value="">Select</option>
+        <option>Word of Mouth</option><option>Instagram</option><option>Facebook</option>
+        <option>Google</option><option>Doctor Referral</option><option>Patient Referral</option>
+        <option>Walk-in</option><option>Other</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">⚠ Medical History / Alerts</label>
+      <input class="form-input" type="text" id="f-medical" placeholder="Allergies, conditions, medications...">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Next Appointment</label>
+      <input class="form-input" type="text" id="f-next" placeholder="e.g. 2 weeks, 15-Jul-2026">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Consent Signed</label>
+      <select class="form-select" id="f-consent">
+        <option value="">Select</option>
+        <option>Yes</option><option>No</option><option>Pending</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Procedural Notes</label>
+      <textarea class="form-input" id="f-notes" rows="3" placeholder="DD-Mon: Procedure. Findings. Next plan." style="resize:none"></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Balance (PKR)</label>
+      <input class="form-input" type="number" id="f-balance" placeholder="0">
+    </div>
+    <button class="btn-primary" onclick="savePatient()">💾 Register Patient</button>
+    <button class="btn-secondary" onclick="navTo('patients')">Cancel</button>
+  </div>
+
+</div>
+
+<!-- FAB -->
+<button class="fab" id="mainFab" onclick="navTo('add')" style="display:none">＋</button>
+
+<!-- BOTTOM NAV -->
+<nav class="bottom-nav" id="bottomNav" style="display:none">
+  <button class="nav-item active" id="nav-dashboard" onclick="navTo('dashboard')">
+    <span class="nav-icon">🏠</span><span class="nav-label">Home</span><div class="nav-dot"></div>
+  </button>
+  <button class="nav-item" id="nav-appointments" onclick="navTo('appointments')">
+    <span class="nav-icon">📅</span><span class="nav-label">Schedule</span><div class="nav-dot"></div>
+  </button>
+  <button class="nav-item" id="nav-patients" onclick="navTo('patients')">
+    <span class="nav-icon">👥</span><span class="nav-label">Patients</span><div class="nav-dot"></div>
+  </button>
+  <button class="nav-item" id="nav-recalls" onclick="navTo('recalls')">
+    <span class="nav-icon">🔔</span><span class="nav-label">Recalls</span><div class="nav-dot"></div>
+  </button>
+</nav>
+
+<!-- SEARCH MODAL -->
+<div class="modal-overlay" id="searchModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div class="modal-title" style="margin:0">Search Patients</div>
+      <button onclick="closeSearch()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted)">✕</button>
+    </div>
+    <input class="search-input" id="searchInput" placeholder="Name, MRN or phone..." oninput="doSearch(this.value)">
+    <div id="searchResults"></div>
+  </div>
+</div>
+
+<!-- TOOTH MODAL -->
+<div class="modal-overlay" id="toothModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="toothModalTitle">Tooth Condition</div>
+    <div class="condition-grid" id="conditionGrid"></div>
+    <button class="btn-secondary" onclick="closeToothModal()" style="margin-top:14px">Cancel</button>
+  </div>
+</div>
+
+</div>
+
+<script>
+// ══════════════════════════════════════════════════
+// CONFIG
+// ══════════════════════════════════════════════════
+const CLIENT_ID   = '1076009437085-tn1ouassn5q8rofv9jv6uvfgbaf4cior.apps.googleusercontent.com';
+const SHEET_ID    = '17Ibo85ftzErCEZkE9flKvLd30zr6nRimtc2Vql7v37o';
+const CALENDAR_ID = 'dr.abdullahkaramat@gmail.com';
+const SCOPES      = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar.readonly';
+
+let accessToken = null;
+let PATIENTS    = [];
+let APPOINTMENTS = [];
+let toothStates  = {};
+let apptFilter   = 'all';
+let recallFilter = 'all';
+
+// ══════════════════════════════════════════════════
+// GOOGLE AUTH
+// ══════════════════════════════════════════════════
+function signInWithGoogle() {
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: (response) => {
+      if (response.error) { alert('Sign in failed: ' + response.error); return; }
+      accessToken = response.access_token;
+      onSignedIn();
+    }
+  });
+  client.requestAccessToken();
+}
+
+function onSignedIn() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('mainHeader').style.display = 'block';
+  document.getElementById('mainContent').style.display = 'block';
+  document.getElementById('mainFab').style.display = 'flex';
+  document.getElementById('bottomNav').style.display = 'flex';
+  initApp();
+}
+
+function signOut() {
+  if (confirm('Sign out of Smile Hub?')) {
+    google.accounts.oauth2.revoke(accessToken, () => {
+      accessToken = null;
+      location.reload();
+    });
+  }
+}
+
+// ══════════════════════════════════════════════════
+// GOOGLE SHEETS API
+// ══════════════════════════════════════════════════
+async function fetchSheet() {
+  try {
+    const res = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Patients`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    const data = await res.json();
+    if (!data.values || data.values.length < 2) return [];
+    const headers = data.values[0];
+    return data.values.slice(1).map(row => {
+      const p = {};
+      headers.forEach((h, i) => p[h.trim()] = row[i] || '');
+      return p;
+    });
+  } catch(e) {
+    console.error('Sheet fetch error:', e);
+    return [];
+  }
+}
+
+async function appendToSheet(rowData) {
+  try {
+    await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Patients!A:Z:append?valueInputOption=USER_ENTERED`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [rowData] })
+      }
+    );
+    return true;
+  } catch(e) {
+    console.error('Append error:', e);
+    return false;
+  }
+}
+
+// ══════════════════════════════════════════════════
+// GOOGLE CALENDAR API
+// ══════════════════════════════════════════════════
+async function fetchTodayEvents() {
+  try {
+    const today = new Date();
+    const start = new Date(today); start.setHours(0,0,0,0);
+    const end   = new Date(today); end.setHours(23,59,59,0);
+    const res   = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(CALENDAR_ID)}/events?timeMin=${start.toISOString()}&timeMax=${end.toISOString()}&orderBy=startTime&singleEvents=true`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    const data = await res.json();
+    return data.items || [];
+  } catch(e) {
+    console.error('Calendar error:', e);
+    return [];
+  }
+}
+
+// ══════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════
+async function initApp() {
+  // Set date
+  const now = new Date();
+  const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  document.getElementById('headerDate').innerHTML =
+    `<strong>${days[now.getDay()]}, ${now.getDate()} ${months[now.getMonth()]}</strong>${now.getFullYear()}`;
+
+  // Set default date in form
+  document.getElementById('f-date').value = now.toISOString().split('T')[0];
+
+  // Show sync bar
+  document.getElementById('sync-status').innerHTML =
+    '<div class="sync-bar">🔄 Syncing with Google Sheets & Calendar...</div>';
+
+  // Fetch data
+  const [patients, events] = await Promise.all([fetchSheet(), fetchTodayEvents()]);
+  PATIENTS     = patients;
+  APPOINTMENTS = events;
+
+  // Update sync status
+  document.getElementById('sync-status').innerHTML =
+    `<div class="sync-bar">✅ Synced — ${PATIENTS.length} patients · ${APPOINTMENTS.length} appointments today</div>`;
+
+  // Set next MR
+  const nextMR = `SH-${String(PATIENTS.length + 1).padStart(4,'0')}`;
+  document.getElementById('f-mr').value = nextMR;
+
+  // Stats
+  document.getElementById('stat-today').textContent    = APPOINTMENTS.length;
+  document.getElementById('stat-patients').textContent = PATIENTS.length;
+  document.getElementById('stat-recalls').textContent  = getOverdueCount();
+
+  renderTodayList();
+  renderPatientList();
+  renderApptList();
+  renderRecallList();
+}
+
+// ══════════════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════════════
+function fmt12(iso) {
+  const d = new Date(iso);
+  const h = d.getHours(), m = d.getMinutes();
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  return { hour:`${h%12||12}:${String(m).padStart(2,'0')}`, ampm };
+}
+
+function getPatientByName(name) {
+  const n = name.toLowerCase().replace(/\?\?/g,'').trim();
+  return PATIENTS.find(p => {
+    const pn = (p['Patient Name']||'').toLowerCase();
+    return pn === n || pn.includes(n) || n.includes(pn.split(' ')[0]);
+  });
+}
+
+function getField(p, ...keys) {
+  for (const k of keys) {
+    const val = p[k] || p[k.trim()] || '';
+    if (val) return val;
+  }
+  return '';
+}
+
+// ══════════════════════════════════════════════════
+// CONDITIONS
+// ══════════════════════════════════════════════════
+const CONDITIONS = [
+  {key:'healthy',           label:'Healthy',   sym:'✓', color:'#e2e8f0', textColor:'#718096'},
+  {key:'caries',            label:'Caries',    sym:'C', color:'#c05621', textColor:'white'},
+  {key:'filling-composite', label:'Composite', sym:'F', color:'#3182ce', textColor:'white'},
+  {key:'filling-amalgam',   label:'Amalgam',   sym:'A', color:'#2d3748', textColor:'white'},
+  {key:'rct',               label:'RCT',       sym:'R', color:'#e53e3e', textColor:'white'},
+  {key:'crown',             label:'Crown',     sym:'Cr',color:'#d69e2e', textColor:'white'},
+  {key:'implant',           label:'Implant',   sym:'I', color:'#805ad5', textColor:'white'},
+  {key:'extracted',         label:'Extracted', sym:'✕', color:'#a0aec0', textColor:'white'},
+  {key:'veneer',            label:'Veneer',    sym:'V', color:'#38a169', textColor:'white'},
+  {key:'bridge',            label:'Bridge',    sym:'B', color:'#d69e2e', textColor:'white'},
+  {key:'ortho',             label:'Ortho',     sym:'◯', color:'#4BBFB0', textColor:'white'},
+  {key:'watch',             label:'Monitor',   sym:'W', color:'#dd6b20', textColor:'white'},
+];
+
+// ══════════════════════════════════════════════════
+// RENDER — TODAY
+// ══════════════════════════════════════════════════
+function renderTodayList() {
+  const el = document.getElementById('today-list');
+  if (!APPOINTMENTS.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-text">No appointments today</div></div>';
+    return;
+  }
+  el.innerHTML = APPOINTMENTS.map(event => {
+    const title     = event.summary || '';
+    const parts     = title.split(' - ');
+    const pName     = parts[0].replace(/\?\?/g,'').replace(/\[.*?\]/g,'').trim();
+    const treatment = parts.slice(1).join(' - ');
+    const patient   = getPatientByName(pName);
+    const mr        = patient ? getField(patient,'MR Number','mr') : '—';
+    const phone     = patient ? getField(patient,'Phone Number','phone') : '';
+    const medical   = patient ? getField(patient,'Medical History / Alerts','medical') : '';
+    const startISO  = event.start?.dateTime || event.start?.date;
+    const t         = startISO ? fmt12(startISO) : {hour:'—',ampm:''};
+    const status    = 'active';
+    const alertDot  = medical ? '<div class="alert-dot"></div>' : '';
+    const waBtn     = phone
+      ? `<button class="btn-icon btn-wa" onclick="event.stopPropagation();sendWA('${phone}','${pName}','${t.hour} ${t.ampm}')">💬</button>`
+      : `<button class="btn-icon btn-wa" style="opacity:0.3" disabled>💬</button>`;
+    return `<div class="appt-card status-${status}" onclick="showPatientByName('${pName}')">
+      ${alertDot}
+      <div class="appt-time"><div class="hour">${t.hour}</div><div class="ampm">${t.ampm}</div></div>
+      <div class="appt-info">
+        <div class="appt-name">${pName}</div>
+        <div class="appt-sub">${treatment||'No treatment noted'}</div>
+        <div class="appt-mr">${mr}</div>
+      </div>
+      <div class="appt-actions">
+        ${waBtn}
+        <button class="btn-icon btn-view" onclick="event.stopPropagation();showPatientByName('${pName}')">👤</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════
+// RENDER — APPOINTMENTS
+// ══════════════════════════════════════════════════
+function renderApptList() {
+  const el = document.getElementById('appt-list');
+  el.innerHTML = APPOINTMENTS.length
+    ? APPOINTMENTS.map(event => {
+        const title   = event.summary || '';
+        const parts   = title.split(' - ');
+        const pName   = parts[0].replace(/\?\?/g,'').replace(/\[.*?\]/g,'').trim();
+        const treat   = parts.slice(1).join(' - ');
+        const patient = getPatientByName(pName);
+        const mr      = patient ? getField(patient,'MR Number') : '—';
+        const phone   = patient ? getField(patient,'Phone Number') : '';
+        const startISO= event.start?.dateTime || event.start?.date;
+        const t       = startISO ? fmt12(startISO) : {hour:'—',ampm:''};
+        const status  = apptFilter !== 'all' && apptFilter !== 'active' ? 'hide' : 'active';
+        if (apptFilter !== 'all' && status === 'hide') return '';
+        const waBtn = phone
+          ? `<button class="btn-icon btn-wa" onclick="event.stopPropagation();sendWA('${phone}','${pName}','${t.hour} ${t.ampm}')">💬</button>`
+          : `<button class="btn-icon btn-wa" style="opacity:0.3" disabled>💬</button>`;
+        return `<div class="appt-card status-active" onclick="showPatientByName('${pName}')">
+          <div class="appt-time"><div class="hour">${t.hour}</div><div class="ampm">${t.ampm}</div></div>
+          <div class="appt-info">
+            <div class="appt-name">${pName}</div>
+            <div class="appt-sub">${treat||'—'}</div>
+            <div class="appt-mr">${mr}</div>
+          </div>
+          <div class="appt-actions">${waBtn}<button class="btn-icon btn-view" onclick="event.stopPropagation();showPatientByName('${pName}')">👤</button></div>
+        </div>`;
+      }).filter(Boolean).join('')
+    : '<div class="empty-state"><div class="empty-icon">📅</div><div class="empty-text">No appointments found</div></div>';
+}
+
+function filterAppts(f,el) {
+  apptFilter = f;
+  document.querySelectorAll('#appt-filter-row .filter-chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  renderApptList();
+}
+
+// ══════════════════════════════════════════════════
+// RENDER — PATIENTS
+// ══════════════════════════════════════════════════
+function renderPatientList() {
+  const el = document.getElementById('patient-list');
+  if (!PATIENTS.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">👥</div><div class="empty-text">No patients found</div></div>';
+    return;
+  }
+  el.innerHTML = PATIENTS.map(p => {
+    const name  = getField(p,'Patient Name','name');
+    const mr    = getField(p,'MR Number','mr');
+    const treat = getField(p,'Treatment / Procedure','treatment');
+    return `<div class="search-result" onclick="showProfile('${mr}')">
+      <div class="result-avatar">${name.charAt(0)||'?'}</div>
+      <div>
+        <div class="result-name">${name}</div>
+        <div class="result-sub">${mr} · ${treat||'No treatment recorded'}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════
+// RENDER — PROFILE
+// ══════════════════════════════════════════════════
+function showProfile(mr) {
+  const p = PATIENTS.find(x => (getField(x,'MR Number','mr')) === mr);
+  if (!p) return;
+  renderProfile(p);
+  navTo('profile');
+  document.getElementById('nav-patients').classList.add('active');
+}
+
+function showPatientByName(name) {
+  const p = getPatientByName(name);
+  if (p) showProfile(getField(p,'MR Number','mr'));
+}
+
+function renderProfile(p) {
+  const name    = getField(p,'Patient Name','name');
+  const mr      = getField(p,'MR Number','mr');
+  const phone   = getField(p,'Phone Number','phone');
+  const medical = getField(p,'Medical History / Alerts','medical');
+  const visit   = getField(p,'Visit Date','visit');
+  const notes   = getField(p,'Procedural Notes','notes');
+  const status  = getField(p,'Status','status') || 'Active';
+  const balance = getField(p,'Balance (PKR)','balance');
+  const doctor  = getField(p,'Treating Doctor','doctor');
+  const next    = getField(p,'Next Appointment','next');
+  const referred= getField(p,'Referred By','referred');
+  const gender  = getField(p,'Gender','gender');
+  const treatment=getField(p,'Treatment / Procedure','treatment');
+
+  const initials = name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase();
+  const visitFmt = visit ? new Date(visit).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : '—';
+
+  let medAlert = medical ? `<div class="alert-banner">⚠️ ${medical}</div>` : '';
+  let tags = `<span class="tag tag-teal">${status}</span>`;
+  if (medical) tags += `<span class="tag tag-red">⚠ Medical Alert</span>`;
+  if (parseFloat(balance) > 0) tags += `<span class="tag tag-yellow">Balance: PKR ${parseFloat(balance).toLocaleString()}</span>`;
+
+  const notesHTML = notes ? notes.split('\n').filter(Boolean).map(line => {
+    const idx = line.indexOf(':');
+    if (idx > 0) {
+      return `<div class="timeline-item">
+        <div class="timeline-dot"></div>
+        <div>
+          <div class="timeline-date">${line.substring(0,idx).trim()}</div>
+          <div class="timeline-proc">${line.substring(idx+1).trim()}</div>
+          ${doctor ? `<div class="timeline-doc">${doctor}</div>` : ''}
+        </div>
+      </div>`;
+    }
+    return '';
+  }).join('') : '<div style="color:var(--text-muted);font-size:13px;padding:10px 0">No notes recorded yet</div>';
+
+  const waBtn = phone
+    ? `<a href="https://wa.me/${phone.replace(/[^0-9]/g,'')}" style="display:block;background:#25d366;color:white;text-align:center;padding:12px;border-radius:12px;font-weight:600;text-decoration:none;margin-bottom:10px">💬 WhatsApp ${name.split(' ')[0]}</a>`
+    : `<div style="background:var(--bg);color:var(--text-muted);text-align:center;padding:12px;border-radius:12px;font-size:13px;margin-bottom:10px">📵 No phone number on record</div>`;
+
+  if (!toothStates[mr]) toothStates[mr] = {};
+
+  document.getElementById('profile-content').innerHTML = `
+  <button class="back-btn" onclick="navTo('patients')">← Back to Patients</button>
+  ${medAlert}
+  <div class="profile-header">
+    <div class="profile-avatar">${initials}</div>
+    <div class="profile-name">${name}</div>
+    <div class="profile-mr">${mr}</div>
+    <div class="profile-tags">${tags}</div>
+  </div>
+  ${waBtn}
+  <div class="info-grid">
+    <div class="info-item"><div class="info-label">First Visit</div><div class="info-value">${visitFmt}</div></div>
+    <div class="info-item"><div class="info-label">Gender</div><div class="info-value">${gender||'—'}</div></div>
+    <div class="info-item"><div class="info-label">Phone</div><div class="info-value" style="font-size:12px">${phone||'—'}</div></div>
+    <div class="info-item"><div class="info-label">Doctor</div><div class="info-value" style="font-size:12px">${doctor||'—'}</div></div>
+    <div class="info-item"><div class="info-label">Next Recall</div><div class="info-value" style="font-size:12px">${next||'—'}</div></div>
+    <div class="info-item"><div class="info-label">Referred By</div><div class="info-value" style="font-size:12px">${referred||'—'}</div></div>
+  </div>
+  <div class="section-title">Dental Chart</div>
+  ${renderDentalChart(mr)}
+  <div class="section-title" style="margin-top:18px">Chart Filter</div>
+  <div class="filter-row" id="chart-filter-row-${mr}">
+    <div class="filter-chip active" onclick="filterChart('all','${mr}',this)">All</div>
+    <div class="filter-chip" onclick="filterChart('rct','${mr}',this)">RCT</div>
+    <div class="filter-chip" onclick="filterChart('crown','${mr}',this)">Crown</div>
+    <div class="filter-chip" onclick="filterChart('extracted','${mr}',this)">Extracted</div>
+    <div class="filter-chip" onclick="filterChart('filling-composite','${mr}',this)">Fillings</div>
+    <div class="filter-chip" onclick="filterChart('implant','${mr}',this)">Implant</div>
+    <div class="filter-chip" onclick="filterChart('ortho','${mr}',this)">Ortho</div>
+  </div>
+  <div id="chart-filter-result-${mr}" style="font-size:13px;color:var(--text-muted);min-height:24px;padding:4px 0"></div>
+  <div class="section-title" style="margin-top:4px">Treatment History</div>
+  <div class="timeline">${notesHTML}</div>
+  <div class="section-title">Treatment</div>
+  <div style="background:var(--card);border-radius:var(--radius-sm);padding:14px;border:1px solid var(--border);margin-bottom:20px;font-size:14px">${treatment||'Not recorded'}</div>`;
+}
+
+// ══════════════════════════════════════════════════
+// DENTAL CHART
+// ══════════════════════════════════════════════════
+function renderDentalChart(mr) {
+  const upper = ['18','17','16','15','14','13','12','11','21','22','23','24','25','26','27','28'];
+  const lower = ['48','47','46','45','44','43','42','41','31','32','33','34','35','36','37','38'];
+  function toothHTML(num) {
+    const cond = (toothStates[mr]||{})[num]||'healthy';
+    const c = CONDITIONS.find(x=>x.key===cond)||CONDITIONS[0];
+    return `<div class="tooth ${cond}" id="tooth-${mr}-${num}" onclick="openToothModal('${mr}','${num}')" title="Tooth ${num}">
+      <span class="tooth-sym" style="color:${c.textColor}">${c.sym}</span>
+      <span class="tooth-num" style="color:${c.textColor}">${num}</span>
+    </div>`;
+  }
+  const legend = CONDITIONS.slice(1).map(c=>
+    `<div class="legend-item"><div class="legend-dot" style="background:${c.color}"></div>${c.label}</div>`
+  ).join('');
+  return `<div class="chart-container">
+    <div class="chart-title">FDI Dental Chart <span style="font-size:11px;color:var(--text-muted);font-weight:400">Tap to update</span></div>
+    <div class="chart-label">Upper — Patient's Right → Left</div>
+    <div class="teeth-row">${upper.map(toothHTML).join('')}</div>
+    <div class="divider-line"></div>
+    <div class="teeth-row">${lower.map(toothHTML).join('')}</div>
+    <div class="chart-label">Lower Jaw</div>
+    <div class="chart-legend">${legend}</div>
+  </div>`;
+}
+
+function filterChart(condition, mr, el) {
+  document.querySelectorAll(`#chart-filter-row-${mr} .filter-chip`).forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  const resultEl = document.getElementById(`chart-filter-result-${mr}`);
+  if (condition==='all') { resultEl.textContent=''; return; }
+  const teeth = Object.entries(toothStates[mr]||{}).filter(([,v])=>v===condition).map(([k])=>k);
+  const c = CONDITIONS.find(x=>x.key===condition);
+  resultEl.innerHTML = teeth.length
+    ? `<span style="font-weight:600;color:var(--navy)">${c?.label}:</span> Teeth ${teeth.join(', ')}`
+    : `<span>No ${c?.label||condition} teeth recorded</span>`;
+}
+
+// ══════════════════════════════════════════════════
+// RECALLS
+// ══════════════════════════════════════════════════
+function parseRecallDate(visitStr, next) {
+  if (!next) return null;
+  const specific = new Date(next);
+  if (!isNaN(specific)) return specific;
+  const base = new Date(visitStr);
+  if (isNaN(base)) return null;
+  const n = next.toLowerCase();
+  let m;
+  if (m=n.match(/(\d+)\s*day/))   { base.setDate(base.getDate()+parseInt(m[1])); return base; }
+  if (m=n.match(/(\d+)\s*week/))  { base.setDate(base.getDate()+parseInt(m[1])*7); return base; }
+  if (m=n.match(/(\d+)\s*month/)) { base.setMonth(base.getMonth()+parseInt(m[1])); return base; }
+  if (m=n.match(/(\d+)\s*year/))  { base.setFullYear(base.getFullYear()+parseInt(m[1])); return base; }
+  return null;
+}
+
+function getRecallStatus(p) {
+  const visit = getField(p,'Visit Date','visit');
+  const next  = getField(p,'Next Appointment','next');
+  const rd    = parseRecallDate(visit, next);
+  if (!rd) return null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const in7   = new Date(today); in7.setDate(today.getDate()+7);
+  rd.setHours(0,0,0,0);
+  if (rd < today) return 'overdue';
+  if (rd <= in7)  return 'soon';
+  return 'upcoming';
+}
+
+function getOverdueCount() {
+  return PATIENTS.filter(p=>getRecallStatus(p)==='overdue').length;
+}
+
+function renderRecallList() {
+  const el = document.getElementById('recall-list');
+  const withRecall = PATIENTS.filter(p=>getField(p,'Next Appointment','next')&&getRecallStatus(p));
+  const filtered   = recallFilter==='all' ? withRecall : withRecall.filter(p=>getRecallStatus(p)===recallFilter);
+  if (!filtered.length) {
+    el.innerHTML='<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-text">No recalls in this category</div></div>';
+    return;
+  }
+  const icons={overdue:'🔴',soon:'🟡',upcoming:'🟢'};
+  const bgClass={overdue:'recall-overdue',soon:'recall-soon',upcoming:'recall-upcoming'};
+  const statusClass={overdue:'status-overdue',soon:'status-soon',upcoming:'status-upcoming'};
+  const labels={overdue:'Overdue',soon:'Due This Week',upcoming:'Upcoming'};
+  el.innerHTML = filtered.map(p => {
+    const name   = getField(p,'Patient Name','name');
+    const mr     = getField(p,'MR Number','mr');
+    const visit  = getField(p,'Visit Date','visit');
+    const next   = getField(p,'Next Appointment','next');
+    const status = getRecallStatus(p);
+    const rd     = parseRecallDate(visit,next);
+    const dateStr= rd ? rd.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : next;
+    return `<div class="recall-card" onclick="showProfile('${mr}')">
+      <div class="recall-badge ${bgClass[status]}">${icons[status]}</div>
+      <div class="recall-info">
+        <div class="recall-name">${name}</div>
+        <div class="recall-due">${mr} · Due: ${dateStr}</div>
+      </div>
+      <div class="recall-status ${statusClass[status]}">${labels[status]}</div>
+    </div>`;
+  }).join('');
+}
+
+function filterRecalls(f,el) {
+  recallFilter=f;
+  document.querySelectorAll('#screen-recalls .filter-chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  renderRecallList();
+}
+
+// ══════════════════════════════════════════════════
+// TOOTH MODAL
+// ══════════════════════════════════════════════════
+let currentToothMR=null, currentToothNum=null;
+
+function openToothModal(mr,num) {
+  currentToothMR=mr; currentToothNum=num;
+  document.getElementById('toothModalTitle').textContent=`Tooth ${num}`;
+  const current=(toothStates[mr]||{})[num]||'healthy';
+  document.getElementById('conditionGrid').innerHTML=CONDITIONS.map(c=>`
+    <button class="condition-btn ${c.key===current?'selected':''}"
+      style="border-color:${c.key===current?c.color:'var(--border)'};background:${c.key===current?c.color+'22':'white'}"
+      onclick="setToothCondition('${c.key}')">
+      <div style="font-size:18px;margin-bottom:2px">${c.sym}</div>
+      <div style="font-size:11px;color:${c.key===current?c.color:'var(--text-muted)'}">${c.label}</div>
+    </button>`).join('');
+  document.getElementById('toothModal').classList.add('open');
+}
+
+function setToothCondition(cond) {
+  if (!toothStates[currentToothMR]) toothStates[currentToothMR]={};
+  toothStates[currentToothMR][currentToothNum]=cond;
+  const el=document.getElementById(`tooth-${currentToothMR}-${currentToothNum}`);
+  if (el) {
+    const c=CONDITIONS.find(x=>x.key===cond);
+    el.className=`tooth ${cond}`;
+    el.innerHTML=`<span class="tooth-sym" style="color:${c.textColor}">${c.sym}</span><span class="tooth-num" style="color:${c.textColor}">${currentToothNum}</span>`;
+  }
+  closeToothModal();
+}
+
+function closeToothModal() { document.getElementById('toothModal').classList.remove('open'); }
+
+// ══════════════════════════════════════════════════
+// SEARCH
+// ══════════════════════════════════════════════════
+function openSearch() {
+  document.getElementById('searchModal').classList.add('open');
+  setTimeout(()=>document.getElementById('searchInput').focus(),100);
+}
+function closeSearch() {
+  document.getElementById('searchModal').classList.remove('open');
+  document.getElementById('searchInput').value='';
+  document.getElementById('searchResults').innerHTML='';
+}
+function doSearch(q) {
+  const el=document.getElementById('searchResults');
+  if (!q.trim()) { el.innerHTML=''; return; }
+  const lq=q.toLowerCase();
+  const results=PATIENTS.filter(p=>{
+    const name=getField(p,'Patient Name','name').toLowerCase();
+    const mr=getField(p,'MR Number','mr').toLowerCase();
+    const phone=getField(p,'Phone Number','phone');
+    return name.includes(lq)||mr.includes(lq)||phone.includes(q);
+  });
+  if (!results.length) { el.innerHTML='<div style="text-align:center;color:var(--text-muted);padding:20px;font-size:13px">No patients found</div>'; return; }
+  el.innerHTML=results.map(p=>{
+    const name=getField(p,'Patient Name','name');
+    const mr=getField(p,'MR Number','mr');
+    const phone=getField(p,'Phone Number','phone');
+    const treat=getField(p,'Treatment / Procedure','treatment');
+    return `<div class="search-result" onclick="closeSearch();showProfile('${mr}')">
+      <div class="result-avatar">${name.charAt(0)||'?'}</div>
+      <div><div class="result-name">${name}</div><div class="result-sub">${mr} · ${phone||'No phone'} · ${treat||'—'}</div></div>
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════
+// SAVE PATIENT
+// ══════════════════════════════════════════════════
+async function savePatient() {
+  const name=document.getElementById('f-name').value.trim();
+  if (!name) { alert('Patient name is required'); return; }
+  const rowData=[
+    document.getElementById('f-date').value,
+    name,
+    document.getElementById('f-mr').value,
+    document.getElementById('f-dob').value,
+    document.getElementById('f-gender').value,
+    document.getElementById('f-phone').value,
+    document.getElementById('f-referred').value,
+    document.getElementById('f-doctor').value,
+    document.getElementById('f-medical').value,
+    document.getElementById('f-treatment').value,
+    document.getElementById('f-next').value,
+    document.getElementById('f-notes').value,
+    document.getElementById('f-consent').value,
+    document.getElementById('f-balance').value||'0',
+    'Active',
+    ''
+  ];
+  const mr=document.getElementById('f-mr').value;
+  const saved=await appendToSheet(rowData);
+  if (saved) {
+    alert(`✅ ${name} registered as ${mr} and saved to Google Sheets!`);
+    await initApp();
+    navTo('patients');
+  } else {
+    alert('⚠ Saved locally but could not sync to Google Sheets. Please check your connection.');
+  }
+}
+
+// ══════════════════════════════════════════════════
+// WHATSAPP
+// ══════════════════════════════════════════════════
+function sendWA(phone,name,time) {
+  const clean=phone.replace(/[^0-9]/g,'');
+  const msg=encodeURIComponent(
+    `السلام علیکم ${name} صاحب/صاحبہ!\n\nThis is a reminder from *Smile Hub Clinics* that you have an appointment tomorrow at *${time}*.\n\n📍 Q Block, Johar Town, Lahore\n\nKindly arrive 5–10 minutes early.\n\nJazakAllah Khair 🌿`
+  );
+  window.open(`https://wa.me/${clean}?text=${msg}`,'_blank');
+}
+
+// ══════════════════════════════════════════════════
+// NAV
+// ══════════════════════════════════════════════════
+function navTo(screen) {
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById(`screen-${screen}`).classList.add('active');
+  const navEl=document.getElementById(`nav-${screen}`);
+  if (navEl) navEl.classList.add('active');
+  document.getElementById('mainFab').style.display=screen==='add'?'none':'flex';
+}
+
+// Close modals on overlay tap
+document.getElementById('searchModal').addEventListener('click',function(e){if(e.target===this)closeSearch()});
+document.getElementById('toothModal').addEventListener('click',function(e){if(e.target===this)closeToothModal()});
+</script>
+</body>
+</html>
