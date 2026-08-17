@@ -576,9 +576,11 @@ html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;pos
 <div class="ov" id="priceModal">
   <div class="sh">
     <div class="handle"></div>
-    <div class="shT" id="priceMT">Edit Price</div>
+    <div class="shT" id="priceMT">Edit Treatment</div>
+    <div class="fG"><label class="fL">Treatment Name</label><input class="fI" id="priceName" placeholder="e.g. Root Canal Treatment"></div>
+    <div class="fG"><label class="fL">Code</label><input class="fI" id="priceCode" placeholder="e.g. RCT"></div>
     <div class="fG"><label class="fL">Price (PKR)</label><input class="fI" type="number" id="priceV" placeholder="0"></div>
-    <button class="btnP" onclick="savePrice()">💾 Save Price</button>
+    <button class="btnP" onclick="savePrice()">💾 Save Changes</button>
     <button class="btnS" onclick="closePriceModal()">Cancel</button>
   </div>
 </div>
@@ -798,39 +800,88 @@ function downloadAsPDF(html, filename) {
 
   if (typeof html2pdf === 'undefined') { fallbackHTML(); return; }
 
+  const PAGE_WIDTH = 800;
+
   const iframe = document.createElement('iframe');
   iframe.style.position = 'fixed';
   iframe.style.left = '-99999px';
   iframe.style.top = '0';
-  iframe.style.width = '800px';
-  iframe.style.height = '1px';
+  iframe.style.width = PAGE_WIDTH + 'px';
+  iframe.style.height = '1200px'; // reasonable starting box so content actually lays out
+  iframe.style.border = '0';
   document.body.appendChild(iframe);
-  const doc = iframe.contentDocument || iframe.contentWindow.document;
-  doc.open(); doc.write(html); doc.close();
 
-  setTimeout(function() {
-    try {
+  function cleanup() {
+    if (iframe.parentNode) document.body.removeChild(iframe);
+  }
+
+  function waitForImages(doc) {
+    const imgs = Array.prototype.slice.call(doc.images || []);
+    if (!imgs.length) return Promise.resolve();
+    return Promise.all(imgs.map(function(img) {
+      if (img.complete) return Promise.resolve();
+      return new Promise(function(resolve) {
+        img.addEventListener('load', resolve, {once:true});
+        img.addEventListener('error', resolve, {once:true});
+        setTimeout(resolve, 2000); // safety cap per image
+      });
+    }));
+  }
+
+  function nextFrame() {
+    return new Promise(function(resolve) {
+      requestAnimationFrame(function(){ requestAnimationFrame(resolve); });
+    });
+  }
+
+  try {
+    const doc = iframe.contentDocument || iframe.contentWindow.document;
+    doc.open(); doc.write(html); doc.close();
+
+    waitForImages(doc).then(nextFrame).then(function() {
+      // Now that images are loaded, measure the real content height
+      const contentHeight = Math.max(
+        doc.body ? doc.body.scrollHeight : 0,
+        doc.documentElement ? doc.documentElement.scrollHeight : 0,
+        600
+      );
+      iframe.style.height = contentHeight + 'px';
+      return nextFrame();
+    }).then(function() {
+      const contentHeight = Math.max(
+        doc.body ? doc.body.scrollHeight : 0,
+        doc.documentElement ? doc.documentElement.scrollHeight : 0,
+        600
+      );
       const opt = {
         margin: 10,
         filename: filename,
         image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: '#ffffff',
+          windowWidth: PAGE_WIDTH,
+          windowHeight: contentHeight,
+          scrollX: 0,
+          scrollY: 0
+        },
         jsPDF: { unit: 'pt', format: 'a4', orientation: 'portrait' },
         pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
       };
-      html2pdf().set(opt).from(doc.body).save().then(function() {
-        document.body.removeChild(iframe);
-      }).catch(function(err) {
-        console.error('PDF generation failed:', err);
-        document.body.removeChild(iframe);
-        fallbackHTML();
-      });
-    } catch(err) {
-      console.error('PDF generation error:', err);
-      document.body.removeChild(iframe);
+      return html2pdf().set(opt).from(doc.body).save();
+    }).then(function() {
+      cleanup();
+    }).catch(function(err) {
+      console.error('PDF generation failed:', err);
+      cleanup();
       fallbackHTML();
-    }
-  }, 350);
+    });
+  } catch(err) {
+    console.error('PDF generation error:', err);
+    cleanup();
+    fallbackHTML();
+  }
 }
 
 let token = null;
@@ -1748,14 +1799,21 @@ function renderPrices() {
 
 function openPriceModal(idx) {
   curPriceIdx=idx;
-  document.getElementById('priceMT').textContent=`Edit: ${PRICES[idx].name}`;
+  document.getElementById('priceMT').textContent='Edit Treatment';
+  document.getElementById('priceName').value=PRICES[idx].name;
+  document.getElementById('priceCode').value=PRICES[idx].code||'';
   document.getElementById('priceV').value=PRICES[idx].price;
   document.getElementById('priceModal').classList.add('open');
-  setTimeout(()=>document.getElementById('priceV').focus(),200);
+  setTimeout(()=>document.getElementById('priceName').focus(),200);
 }
 
 function savePrice() {
+  const name=document.getElementById('priceName').value.trim();
+  const code=document.getElementById('priceCode').value.trim();
   const val=parseFloat(document.getElementById('priceV').value)||0;
+  if(!name){alert('Treatment name cannot be empty');return;}
+  PRICES[curPriceIdx].name=name;
+  PRICES[curPriceIdx].code=code;
   PRICES[curPriceIdx].price=val;
   localStorage.setItem('smilehub_prices',JSON.stringify(PRICES));
   closePriceModal(); renderPrices();
