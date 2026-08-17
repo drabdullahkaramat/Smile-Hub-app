@@ -812,7 +812,11 @@ function downloadAsPDF(html, filename) {
     a.click(); URL.revokeObjectURL(url);
   }
 
-  if (typeof html2pdf === 'undefined') { fallbackHTML(); return; }
+  if (typeof html2pdf === 'undefined') {
+    alert('PDF library did not load (v3) — saving as HTML instead. Check your internet connection and try again.');
+    fallbackHTML();
+    return;
+  }
 
   const PAGE_WIDTH = 800;
   let container = null;
@@ -866,6 +870,16 @@ function downloadAsPDF(html, filename) {
 
     waitForImages(container).then(nextFrame).then(nextFrame).then(function() {
       const contentHeight = Math.max(container.scrollHeight, 600);
+      const imgCount = container.querySelectorAll('img').length;
+      const diag = 'bodyHTML chars: ' + bodyHTML.length +
+        ' | CSS found: ' + (rawCSS.length > 0) +
+        ' | container.scrollHeight: ' + container.scrollHeight +
+        ' | container.children: ' + container.children.length +
+        ' | images: ' + imgCount;
+      console.log('PDF diag (v3):', diag);
+      if (bodyHTML.length < 20 || container.children.length === 0) {
+        alert('PDF diagnostic (v3): content looks empty before capture.\n' + diag);
+      }
       const opt = {
         margin: 10,
         filename: filename,
@@ -887,11 +901,13 @@ function downloadAsPDF(html, filename) {
       cleanup();
     }).catch(function(err) {
       console.error('PDF generation failed:', err);
+      alert('PDF generation failed (v3): ' + (err && err.message ? err.message : err));
       cleanup();
       fallbackHTML();
     });
   } catch(err) {
     console.error('PDF generation error:', err);
+    alert('PDF generation error (v3, sync): ' + (err && err.message ? err.message : err));
     cleanup();
     fallbackHTML();
   }
