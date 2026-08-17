@@ -813,7 +813,7 @@ function downloadAsPDF(html, filename) {
   }
 
   if (typeof html2pdf === 'undefined') {
-    alert('PDF library did not load (v3) — saving as HTML instead. Check your internet connection and try again.');
+    alert('PDF library did not load (v4) — saving as HTML instead. Check your internet connection and try again.');
     fallbackHTML();
     return;
   }
@@ -821,10 +821,12 @@ function downloadAsPDF(html, filename) {
   const PAGE_WIDTH = 800;
   let container = null;
   let styleEl = null;
+  let overlay = null;
 
   function cleanup() {
     if (container && container.parentNode) container.parentNode.removeChild(container);
     if (styleEl && styleEl.parentNode) styleEl.parentNode.removeChild(styleEl);
+    if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
   }
 
   function waitForImages(root) {
@@ -847,19 +849,30 @@ function downloadAsPDF(html, filename) {
   }
 
   try {
-    // Parse the standalone document string without ever attaching it as
-    // a live document — avoids iframe cross-document rendering quirks
-    // that are unreliable on some mobile browsers.
     const parsed = new DOMParser().parseFromString(html, 'text/html');
     const styleNode = parsed.head ? parsed.head.querySelector('style') : null;
     const rawCSS = styleNode ? styleNode.textContent : '';
     const bodyHTML = parsed.body ? parsed.body.innerHTML : html;
 
     const uid = 'pdfExp' + Date.now();
+
+    // A visible loading cover so the user sees a friendly message instead
+    // of the raw content flashing by — the content underneath is real,
+    // on-screen, and normally opaque so the browser actually paints it.
+    // (Hiding the render target via opacity/negative z-index caused some
+    // mobile browsers to skip painting it, producing a blank capture.)
+    overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:999999;background:#ffffff;' +
+      'display:flex;flex-direction:column;align-items:center;justify-content:center;' +
+      'font-family:Arial,sans-serif;color:#1B3F6B;';
+    overlay.innerHTML = '<div style="font-size:15px;font-weight:600">📄 Generating PDF…</div>' +
+      '<div style="font-size:12px;color:#6b7a8d;margin-top:6px">This only takes a moment</div>';
+    document.body.appendChild(overlay);
+
     container = document.createElement('div');
     container.id = uid;
     container.style.cssText = 'position:fixed;top:0;left:0;width:' + PAGE_WIDTH + 'px;' +
-      'z-index:-99999;opacity:0.001;pointer-events:none;background:#ffffff;overflow:visible;';
+      'z-index:999998;background:#ffffff;overflow:visible;';
     container.innerHTML = bodyHTML;
 
     styleEl = document.createElement('style');
@@ -876,9 +889,9 @@ function downloadAsPDF(html, filename) {
         ' | container.scrollHeight: ' + container.scrollHeight +
         ' | container.children: ' + container.children.length +
         ' | images: ' + imgCount;
-      console.log('PDF diag (v3):', diag);
+      console.log('PDF diag (v4):', diag);
       if (bodyHTML.length < 20 || container.children.length === 0) {
-        alert('PDF diagnostic (v3): content looks empty before capture.\n' + diag);
+        alert('PDF diagnostic (v4): content looks empty before capture.\n' + diag);
       }
       const opt = {
         margin: 10,
@@ -901,13 +914,13 @@ function downloadAsPDF(html, filename) {
       cleanup();
     }).catch(function(err) {
       console.error('PDF generation failed:', err);
-      alert('PDF generation failed (v3): ' + (err && err.message ? err.message : err));
+      alert('PDF generation failed (v4): ' + (err && err.message ? err.message : err));
       cleanup();
       fallbackHTML();
     });
   } catch(err) {
     console.error('PDF generation error:', err);
-    alert('PDF generation error (v3, sync): ' + (err && err.message ? err.message : err));
+    alert('PDF generation error (v4, sync): ' + (err && err.message ? err.message : err));
     cleanup();
     fallbackHTML();
   }
