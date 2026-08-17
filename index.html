@@ -7,6 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Smile Hub Clinics</title>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 :root{
@@ -784,6 +785,54 @@ function pdfSignatureHTML() {
   </div>`;
 }
 
+// Converts a full standalone HTML document string into a real downloaded PDF file.
+// Falls back to an .html download if the PDF library isn't available for any reason.
+function downloadAsPDF(html, filename) {
+  function fallbackHTML() {
+    const blob = new Blob([html], {type:'text/html'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename.replace(/\.pdf$/i, '.html');
+    a.click(); URL.revokeObjectURL(url);
+  }
+
+  if (typeof html2pdf === 'undefined') { fallbackHTML(); return; }
+
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.left = '-99999px';
+  iframe.style.top = '0';
+  iframe.style.width = '800px';
+  iframe.style.height = '1px';
+  document.body.appendChild(iframe);
+  const doc = iframe.contentDocument || iframe.contentWindow.document;
+  doc.open(); doc.write(html); doc.close();
+
+  setTimeout(function() {
+    try {
+      const opt = {
+        margin: 10,
+        filename: filename,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+        jsPDF: { unit: 'pt', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+      };
+      html2pdf().set(opt).from(doc.body).save().then(function() {
+        document.body.removeChild(iframe);
+      }).catch(function(err) {
+        console.error('PDF generation failed:', err);
+        document.body.removeChild(iframe);
+        fallbackHTML();
+      });
+    } catch(err) {
+      console.error('PDF generation error:', err);
+      document.body.removeChild(iframe);
+      fallbackHTML();
+    }
+  }, 350);
+}
+
 let token = null;
 let PATIENTS = [];
 let EVENTS = [];
@@ -1201,6 +1250,17 @@ function showProfile(mr) {
   document.getElementById('n-patients').classList.add('on');
 }
 
+// Re-renders the profile in place (no navigation, no scroll reset) —
+// use this after edits made while the profile screen is already open.
+function refreshProfile(mr) {
+  const p = PATIENTS.find(x=>getMR(x)===mr);
+  if(!p) return;
+  const cnt = document.getElementById('cnt');
+  const scrollPos = cnt ? cnt.scrollTop : 0;
+  renderProfile(p);
+  if(cnt) cnt.scrollTop = scrollPos;
+}
+
 function renderProfile(p) {
   const name=f(p,'Patient Name'), mr=getMR(p), phone=getPhone(p), med=getMed(p);
   const visit=f(p,'Visit Date'), notes=f(p,'Procedural Notes'), status=f(p,'Status')||'Active';
@@ -1225,8 +1285,11 @@ function renderProfile(p) {
   const total = plan.reduce((s,i)=>s+(parseFloat(i.cost)||0),0);
   const planHTML = plan.length ? `
     ${total>0?`<div class="tpTotal"><span class="tpTotalL">Total Estimated Cost</span><span class="tpTotalV">PKR ${total.toLocaleString()}</span></div>`:''}
-    ${plan.map((item,idx)=>`
-    <div class="tpCard">
+    ${plan.map((item,idx)=>{
+      const pc=tpColor(item.proc), ps=tpSymbol(item.proc);
+      return `
+    <div class="tpCard" style="border-left:4px solid ${pc}">
+      <span style="width:20px;height:20px;border-radius:5px;background:${pc};color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${ps}</span>
       <div class="tpInfo">
         <div class="tpProc">${item.proc} ${item.tooth?'· Tooth '+item.tooth:''}</div>
         <div class="tpMeta">
@@ -1241,7 +1304,7 @@ function renderProfile(p) {
           <button class="tpBtn tpDelete" onclick="deleteTpItem('${mr}',${idx})" title="Remove">✕</button>
         </div>
       </div>
-    </div>`).join('')}` : '<div style="color:var(--muted);font-size:12px;padding:8px 0">No treatment plan yet</div>';
+    </div>`;}).join('')}` : '<div style="color:var(--muted);font-size:12px;padding:8px 0">No treatment plan yet</div>';
 
   document.getElementById('profContent').innerHTML = `
   <button class="bkBtn" onclick="go('patients')">← Patients</button>
@@ -1329,6 +1392,20 @@ function tpColor(proc) {
   if(p.includes('align')||p.includes('ortho')) return '#4c51bf';
   return '#2d3748';
 }
+function tpSymbol(proc) {
+  const p=(proc||'').toLowerCase();
+  if(p.includes('rct')||p.includes('root canal')) return 'R';
+  if(p.includes('crown')||p.includes('cap')) return 'Cr';
+  if(p.includes('extract')) return '✕';
+  if(p.includes('fill')||p.includes('composite')) return 'F';
+  if(p.includes('implant')) return 'I';
+  if(p.includes('scal')) return 'Sc';
+  if(p.includes('veneer')) return 'V';
+  if(p.includes('denture')||p.includes('bridge')||p.includes('rpd')||p.includes('fpd')) return 'D';
+  if(p.includes('whit')) return 'W';
+  if(p.includes('align')||p.includes('ortho')) return 'O';
+  return '•';
+}
 function parseTeethFromStr(s) {
   if(!s) return [];
   const m=String(s).match(/\b[1-4][1-8]\b/g);
@@ -1351,11 +1428,12 @@ function renderTpChart(mr) {
     const items=toothMap[num];
     if(!items||!items.length) return `<div class="tooth" style="background:#fff"><span class="tS" style="color:#e2e8f0">·</span><span class="tN" style="color:#cbd5e0">${num}</span></div>`;
     const c=items[0].color;
+    const sym=tpSymbol(items[0].proc);
     const title=items.map(i=>i.proc).join(', ');
-    return `<div class="tooth" title="${title}" style="background:${c};border-color:${c}"><span class="tS" style="color:#fff">●</span><span class="tN" style="color:#fff">${num}</span></div>`;
+    return `<div class="tooth" title="${title}" style="background:${c};border-color:${c}"><span class="tS" style="color:#fff">${sym}</span><span class="tN" style="color:#fff">${num}</span></div>`;
   };
   const legendProcs=[...new Set(plan.map(i=>i.proc))];
-  const legend=legendProcs.map(p=>`<div class="lgI"><div class="lgD" style="background:${tpColor(p)}"></div>${p}</div>`).join('');
+  const legend=legendProcs.map(p=>`<div class="lgI"><span style="width:14px;height:14px;border-radius:3px;background:${tpColor(p)};color:#fff;font-size:8px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${tpSymbol(p)}</span>${p}</div>`).join('');
   const fmHtml=fullMouth.length?`<div style="font-size:11px;color:var(--muted);margin-top:8px">🦷 Full mouth / general: ${fullMouth.join(', ')}</div>`:'';
   return `<div class="chartW"><div class="chartT">Proposed Treatment <span style="font-size:10px;color:var(--muted);font-weight:400">Visual overview</span></div>
     <div class="chartL">Upper — Right → Left</div>
@@ -1437,7 +1515,7 @@ async function saveEdit() {
   closeEdit();
   // Re-render patient list and profile
   renderPats();
-  showProfile(editMR);
+  refreshProfile(editMR);
 
   // Write back to sheet via GET parameters (CORS-safe)
   try {
@@ -1471,7 +1549,7 @@ async function saveNote() {
     p['Procedural Notes']=newNotes;
   }
   closeNote();
-  showProfile(curNoteMR);
+  refreshProfile(curNoteMR);
 
   // Write back to sheet via GET (CORS-safe)
   try {
@@ -1554,14 +1632,14 @@ function saveTpItem() {
   TREATMENT_PLANS[curTpMR].push({tooth,proc,cost:parseFloat(cost)||0,priority:pri,note,status:'Planned',date:new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short'})});
   localStorage.setItem('smilehub_plans',JSON.stringify(TREATMENT_PLANS));
   closeTpModal();
-  showProfile(curTpMR);
+  refreshProfile(curTpMR);
 }
 
 function completeTpItem(mr,idx) {
-  if(TREATMENT_PLANS[mr]){TREATMENT_PLANS[mr][idx].status='Completed'; localStorage.setItem('smilehub_plans',JSON.stringify(TREATMENT_PLANS)); showProfile(mr);}
+  if(TREATMENT_PLANS[mr]){TREATMENT_PLANS[mr][idx].status='Completed'; localStorage.setItem('smilehub_plans',JSON.stringify(TREATMENT_PLANS)); refreshProfile(mr);}
 }
 function deleteTpItem(mr,idx) {
-  if(TREATMENT_PLANS[mr]){TREATMENT_PLANS[mr].splice(idx,1); localStorage.setItem('smilehub_plans',JSON.stringify(TREATMENT_PLANS)); showProfile(mr);}
+  if(TREATMENT_PLANS[mr]){TREATMENT_PLANS[mr].splice(idx,1); localStorage.setItem('smilehub_plans',JSON.stringify(TREATMENT_PLANS)); refreshProfile(mr);}
 }
 function closeTpModal(){document.getElementById('tpModal').classList.remove('open');}
 
@@ -1584,11 +1662,13 @@ function buildTpDiagramHTML(plan) {
   const cell=(num)=>{
     const items=toothMap[num];
     const bg=items&&items.length?items[0].color:'#f8fafc';
+    const bd=items&&items.length?items[0].color:'#e2e8f0';
     const tc=items&&items.length?'#fff':'#a0aec0';
-    return `<div style="width:26px;height:30px;border-radius:5px 5px 7px 7px;border:1.5px solid ${bg};background:${bg};display:inline-flex;align-items:center;justify-content:center;margin:0 1px"><span style="font-size:7px;font-weight:700;color:${tc}">${num}</span></div>`;
+    const sym=items&&items.length?tpSymbol(items[0].proc):'·';
+    return `<div style="width:26px;height:30px;border-radius:5px 5px 7px 7px;border:1.5px solid ${bd};background:${bg};display:inline-flex;flex-direction:column;align-items:center;justify-content:center;margin:0 1px;vertical-align:top"><span style="font-size:9px;font-weight:700;color:${tc};line-height:1">${sym}</span><span style="font-size:6px;font-weight:600;color:${tc};line-height:1.4">${num}</span></div>`;
   };
   const legendProcs=[...new Set(active.map(i=>i.proc))];
-  const legend=legendProcs.map(p=>`<span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#4a5568;margin-right:12px"><span style="width:9px;height:9px;border-radius:2px;background:${tpColor(p)};display:inline-block"></span>${p}</span>`).join('');
+  const legend=legendProcs.map(p=>`<span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#4a5568;margin-right:12px"><span style="width:14px;height:14px;border-radius:3px;background:${tpColor(p)};color:#fff;font-size:8px;font-weight:700;display:inline-flex;align-items:center;justify-content:center">${tpSymbol(p)}</span>${p}</span>`).join('');
   const fmHtml=fullMouth.length?`<div style="font-size:11px;color:#6b7a8d;margin-top:6px;text-align:left">🦷 Full mouth / general: ${fullMouth.join(', ')}</div>`:'';
   return `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px;margin-bottom:20px">
     <div style="font-size:11px;font-weight:700;color:#1B3F6B;margin-bottom:8px;letter-spacing:.5px">VISUAL TREATMENT OVERVIEW</div>
@@ -1651,11 +1731,7 @@ function downloadTreatmentPlan(mr) {
   <div class="footer">Smile Hub Clinics · Johar Town, Lahore · Generated: ${today}</div>
   </body></html>`;
 
-  const blob=new Blob([html],{type:'text/html'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  a.href=url; a.download=`TreatmentPlan_${name.replace(/\s/g,'_')}_${mr}.html`;
-  a.click(); URL.revokeObjectURL(url);
+  downloadAsPDF(html, `TreatmentPlan_${name.replace(/\s/g,'_')}_${mr}.pdf`);
 }
 
 // ═══════════════════════════════════════
@@ -2213,11 +2289,7 @@ function generateReceipt(mr) {
   ${pdfSignatureHTML()}
   <div class="footer">Smile Hub Clinics · Johar Town, Lahore · Thank you for choosing us!</div>
   </body></html>`;
-  const blob=new Blob([html],{type:'text/html'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  a.href=url; a.download=`Receipt_${name.replace(/\s/g,'_')}_${getMR(p)}.html`;
-  a.click(); URL.revokeObjectURL(url);
+  downloadAsPDF(html, `Receipt_${name.replace(/\s/g,'_')}_${getMR(p)}.pdf`);
 }
 
 function updateRevenueStats() {
@@ -2434,11 +2506,7 @@ function downloadLabBillingReport() {
   <div class="hdr"><div class="logo">🦷 Smile Hub Clinics</div>
   <div style="font-size:13px;color:#6b7a8d;margin-top:4px">Lab Billing Report · ${months[month]} ${year}</div></div>
   ${content}</body></html>`;
-  const blob = new Blob([html],{type:'text/html'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href=url; a.download=`LabBilling_${months[month]}_${year}.html`;
-  a.click(); URL.revokeObjectURL(url);
+  downloadAsPDF(html, `LabBilling_${months[month]}_${year}.pdf`);
 }
 
 function closeLabModal(){document.getElementById('labModal').classList.remove('open');}
@@ -2554,11 +2622,7 @@ function downloadPatientRecord(mr) {
   <div class="footer">Record generated: ${today} · Smile Hub Clinics · Johar Town, Lahore · Confidential Medical Record</div>
   </body></html>`;
 
-  const blob=new Blob([html],{type:'text/html'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  a.href=url; a.download=`PatientRecord_${name.replace(/\s/g,'_')}_${getMR(p)}.html`;
-  a.click(); URL.revokeObjectURL(url);
+  downloadAsPDF(html, `PatientRecord_${name.replace(/\s/g,'_')}_${getMR(p)}.pdf`);
 }
 
 // ═══════════════════════════════════════
