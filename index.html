@@ -789,6 +789,20 @@ function pdfSignatureHTML() {
 
 // Converts a full standalone HTML document string into a real downloaded PDF file.
 // Falls back to an .html download if the PDF library isn't available for any reason.
+// Turns a naive flat CSS string (no @-rules, no nesting) into one scoped
+// under a wrapper selector, so injecting it into the live app page can't
+// clash with or override the app's own styles.
+function scopeCSS(cssText, scopeSelector) {
+  return cssText.replace(/([^{}]+)\{([^{}]*)\}/g, function(match, selectors, decls) {
+    const scoped = selectors.split(',').map(function(sel) {
+      sel = sel.trim();
+      if (!sel) return sel;
+      return scopeSelector + ' ' + sel;
+    }).join(', ');
+    return scoped + '{' + decls + '}';
+  });
+}
+
 function downloadAsPDF(html, filename) {
   function fallbackHTML() {
     const blob = new Blob([html], {type:'text/html'});
@@ -801,29 +815,23 @@ function downloadAsPDF(html, filename) {
   if (typeof html2pdf === 'undefined') { fallbackHTML(); return; }
 
   const PAGE_WIDTH = 800;
-
-  const iframe = document.createElement('iframe');
-  iframe.style.position = 'fixed';
-  iframe.style.left = '-99999px';
-  iframe.style.top = '0';
-  iframe.style.width = PAGE_WIDTH + 'px';
-  iframe.style.height = '1200px'; // reasonable starting box so content actually lays out
-  iframe.style.border = '0';
-  document.body.appendChild(iframe);
+  let container = null;
+  let styleEl = null;
 
   function cleanup() {
-    if (iframe.parentNode) document.body.removeChild(iframe);
+    if (container && container.parentNode) container.parentNode.removeChild(container);
+    if (styleEl && styleEl.parentNode) styleEl.parentNode.removeChild(styleEl);
   }
 
-  function waitForImages(doc) {
-    const imgs = Array.prototype.slice.call(doc.images || []);
+  function waitForImages(root) {
+    const imgs = Array.prototype.slice.call(root.querySelectorAll('img'));
     if (!imgs.length) return Promise.resolve();
     return Promise.all(imgs.map(function(img) {
       if (img.complete) return Promise.resolve();
       return new Promise(function(resolve) {
         img.addEventListener('load', resolve, {once:true});
         img.addEventListener('error', resolve, {once:true});
-        setTimeout(resolve, 2000); // safety cap per image
+        setTimeout(resolve, 2000);
       });
     }));
   }
@@ -835,24 +843,29 @@ function downloadAsPDF(html, filename) {
   }
 
   try {
-    const doc = iframe.contentDocument || iframe.contentWindow.document;
-    doc.open(); doc.write(html); doc.close();
+    // Parse the standalone document string without ever attaching it as
+    // a live document — avoids iframe cross-document rendering quirks
+    // that are unreliable on some mobile browsers.
+    const parsed = new DOMParser().parseFromString(html, 'text/html');
+    const styleNode = parsed.head ? parsed.head.querySelector('style') : null;
+    const rawCSS = styleNode ? styleNode.textContent : '';
+    const bodyHTML = parsed.body ? parsed.body.innerHTML : html;
 
-    waitForImages(doc).then(nextFrame).then(function() {
-      // Now that images are loaded, measure the real content height
-      const contentHeight = Math.max(
-        doc.body ? doc.body.scrollHeight : 0,
-        doc.documentElement ? doc.documentElement.scrollHeight : 0,
-        600
-      );
-      iframe.style.height = contentHeight + 'px';
-      return nextFrame();
-    }).then(function() {
-      const contentHeight = Math.max(
-        doc.body ? doc.body.scrollHeight : 0,
-        doc.documentElement ? doc.documentElement.scrollHeight : 0,
-        600
-      );
+    const uid = 'pdfExp' + Date.now();
+    container = document.createElement('div');
+    container.id = uid;
+    container.style.cssText = 'position:fixed;top:0;left:0;width:' + PAGE_WIDTH + 'px;' +
+      'z-index:-99999;opacity:0.001;pointer-events:none;background:#ffffff;overflow:visible;';
+    container.innerHTML = bodyHTML;
+
+    styleEl = document.createElement('style');
+    styleEl.textContent = scopeCSS(rawCSS, '#' + uid) +
+      ' #' + uid + '{font-family:Arial,sans-serif;max-width:none;margin:0;padding:30px;color:#1a2332;box-sizing:border-box;}';
+    document.head.appendChild(styleEl);
+    document.body.appendChild(container);
+
+    waitForImages(container).then(nextFrame).then(nextFrame).then(function() {
+      const contentHeight = Math.max(container.scrollHeight, 600);
       const opt = {
         margin: 10,
         filename: filename,
@@ -869,7 +882,7 @@ function downloadAsPDF(html, filename) {
         jsPDF: { unit: 'pt', format: 'a4', orientation: 'portrait' },
         pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
       };
-      return html2pdf().set(opt).from(doc.body).save();
+      return html2pdf().set(opt).from(container).save();
     }).then(function() {
       cleanup();
     }).catch(function(err) {
@@ -2643,8 +2656,7 @@ function downloadPatientRecord(mr) {
   .summary{background:#f8fafc;border-radius:8px;padding:12px;margin-bottom:16px}
   .sig{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:40px}
   .sigLine{border-top:1px solid #2d3748;padding-top:8px;font-size:11px;color:#6b7a8d;text-align:center}
-  .footer{text-align:center;font-size:10px;color:#6b7a8d;border-top:1px solid #e2e8f0;padding-top:14px;margin-top:20px}
-  @media print{body{padding:15px}}</style>
+  .footer{text-align:center;font-size:10px;color:#6b7a8d;border-top:1px solid #e2e8f0;padding-top:14px;margin-top:20px}</style>
   </head><body>
   ${pdfHeaderHTML('COMPLETE PATIENT RECORD')}
 
