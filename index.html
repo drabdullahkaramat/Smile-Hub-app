@@ -1021,6 +1021,22 @@ async function initApp() {
     localStorage.setItem('smilehub_plans', JSON.stringify(TREATMENT_PLANS));
     localStorage.setItem('smilehub_payments', JSON.stringify(PAYMENTS));
     localStorage.setItem('smilehub_lab', JSON.stringify(LAB_WORK));
+
+    // Price list is clinic-wide, not per-patient, so it lives on a special
+    // non-patient settings row (MR Number = CLINIC_SETTINGS) rather than a
+    // real patient's row. Pull it out, then remove that row from PATIENTS
+    // so it never shows up in the directory, search, or recall lists.
+    const settingsRow = PATIENTS.find(p => getMR(p) === 'CLINIC_SETTINGS');
+    if (settingsRow) {
+      const priceJson = f(settingsRow, 'Price List JSON');
+      if (priceJson) {
+        try {
+          PRICES = JSON.parse(priceJson);
+          localStorage.setItem('smilehub_prices', JSON.stringify(PRICES));
+        } catch(e) { console.error('Price list parse error:', e); }
+      }
+      PATIENTS = PATIENTS.filter(p => getMR(p) !== 'CLINIC_SETTINGS');
+    }
     EVENTS = events.sort((a,b) => new Date(a.start?.dateTime||a.start?.date||0) - new Date(b.start?.dateTime||b.start?.date||0));
     ALL_EVENTS = allEvents.sort((a,b) => new Date(a.start?.dateTime||a.start?.date||0) - new Date(b.start?.dateTime||b.start?.date||0));
 
@@ -1815,6 +1831,7 @@ function savePrice() {
   PRICES[curPriceIdx].code=code;
   PRICES[curPriceIdx].price=val;
   localStorage.setItem('smilehub_prices',JSON.stringify(PRICES));
+  syncSheetField('CLINIC_SETTINGS', 'Price List JSON', JSON.stringify(PRICES));
   closePriceModal(); renderPrices();
 }
 function closePriceModal(){document.getElementById('priceModal').classList.remove('open');}
@@ -1827,6 +1844,7 @@ function saveNewPrice() {
   if(!name){alert('Enter procedure name');return;}
   PRICES.push({name,code,price});
   localStorage.setItem('smilehub_prices',JSON.stringify(PRICES));
+  syncSheetField('CLINIC_SETTINGS', 'Price List JSON', JSON.stringify(PRICES));
   closeAddPrice(); renderPrices();
 }
 function closeAddPrice(){document.getElementById('addPriceModal').classList.remove('open');}
