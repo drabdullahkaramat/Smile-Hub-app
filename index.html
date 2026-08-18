@@ -762,6 +762,20 @@ const CLIENT_ID  = '1076009437085-tn1ouassn5q8rofv9jv6uvfgbaf4cior.apps.googleus
 const CAL_ID     = 'dr.abdullahkaramat@gmail.com'; // fallback, overridden after login
 let ACTIVE_CAL_ID = 'dr.abdullahkaramat@gmail.com'; // set dynamically after sign-in
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx1fI8vCrgSuKrRVaiJhDOzsVU-rwO-IrpnCJ6ibhJYCRR9khTg1XZFtOu0AP3KhEcxvA/exec';
+
+// Writes one field to the patient's sheet row so it's shared across every
+// device/browser — used for Treatment Plan / Payments / Lab Work JSON
+// blobs, which previously only lived in this browser's localStorage.
+async function syncSheetField(mr, field, value) {
+  try {
+    const url = `${SCRIPT_URL}?action=update&mr=${encodeURIComponent(mr)}&field=${encodeURIComponent(field)}&value=${encodeURIComponent(value)}`;
+    const r = await fetch(url);
+    const d = await r.json();
+    if(!d.success) console.warn('Sheet sync failed:', field, d.error);
+  } catch(e) {
+    console.error('Sheet sync error:', field, e);
+  }
+}
 const SCOPES     = 'https://www.googleapis.com/auth/calendar.events';
 const CLINIC     = 'Smile Hub Clinics, 599 Main Blvd, Q Block, Phase II, Johar Town, Lahore';
 const MAPS_LINK  = 'https://maps.google.com/?q=Smile+Hub+Clinics+599+Main+Blvd+Q+Block+Johar+Town+Lahore';
@@ -970,19 +984,19 @@ async function initApp() {
   document.getElementById('aDate').value = now.toISOString().split('T')[0];
   document.getElementById('aTime').value = '18:30';
 
-  // Load prices from localStorage or defaults
+  // Prices are a device-level preference, not patient data — localStorage only.
   const savedPrices = localStorage.getItem('smilehub_prices');
   PRICES = savedPrices ? JSON.parse(savedPrices) : [...DEFAULT_PRICES];
 
-  // Load treatment plans from localStorage
+  // Treatment plans / payments / lab work: use localStorage as an instant
+  // offline fallback while we wait on the sheet fetch below, which is the
+  // shared source of truth across devices.
   const savedPlans = localStorage.getItem('smilehub_plans');
   TREATMENT_PLANS = savedPlans ? JSON.parse(savedPlans) : {};
 
-  // Load payments from localStorage
   const savedPayments = localStorage.getItem('smilehub_payments');
   PAYMENTS = savedPayments ? JSON.parse(savedPayments) : {};
 
-  // Load lab work from localStorage
   const savedLab = localStorage.getItem('smilehub_lab');
   LAB_WORK = savedLab ? JSON.parse(savedLab) : {};
 
@@ -991,6 +1005,22 @@ async function initApp() {
   try {
     const [patients, events, allEvents] = await Promise.all([fetchPatients(), fetchEvents(), fetchAllEvents()]);
     PATIENTS = patients;
+
+    // Pull each patient's treatment plan / payments / lab work from their
+    // sheet row (shared across every device) — overrides the localStorage
+    // fallback loaded above for any patient that has sheet data.
+    PATIENTS.forEach(p => {
+      const mr = getMR(p);
+      const tpJson = f(p, 'Treatment Plan JSON');
+      const payJson = f(p, 'Payments JSON');
+      const labJson = f(p, 'Lab Work JSON');
+      if (tpJson) { try { TREATMENT_PLANS[mr] = JSON.parse(tpJson); } catch(e){} }
+      if (payJson) { try { PAYMENTS[mr] = JSON.parse(payJson); } catch(e){} }
+      if (labJson) { try { LAB_WORK[mr] = JSON.parse(labJson); } catch(e){} }
+    });
+    localStorage.setItem('smilehub_plans', JSON.stringify(TREATMENT_PLANS));
+    localStorage.setItem('smilehub_payments', JSON.stringify(PAYMENTS));
+    localStorage.setItem('smilehub_lab', JSON.stringify(LAB_WORK));
     EVENTS = events.sort((a,b) => new Date(a.start?.dateTime||a.start?.date||0) - new Date(b.start?.dateTime||b.start?.date||0));
     ALL_EVENTS = allEvents.sort((a,b) => new Date(a.start?.dateTime||a.start?.date||0) - new Date(b.start?.dateTime||b.start?.date||0));
 
@@ -1640,15 +1670,26 @@ function saveTpItem() {
   if(!TREATMENT_PLANS[curTpMR]) TREATMENT_PLANS[curTpMR]=[];
   TREATMENT_PLANS[curTpMR].push({tooth,proc,cost:parseFloat(cost)||0,priority:pri,note,status:'Planned',date:new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short'})});
   localStorage.setItem('smilehub_plans',JSON.stringify(TREATMENT_PLANS));
+  syncSheetField(curTpMR, 'Treatment Plan JSON', JSON.stringify(TREATMENT_PLANS[curTpMR]));
   closeTpModal();
   refreshProfile(curTpMR);
 }
 
 function completeTpItem(mr,idx) {
-  if(TREATMENT_PLANS[mr]){TREATMENT_PLANS[mr][idx].status='Completed'; localStorage.setItem('smilehub_plans',JSON.stringify(TREATMENT_PLANS)); refreshProfile(mr);}
+  if(TREATMENT_PLANS[mr]){
+    TREATMENT_PLANS[mr][idx].status='Completed';
+    localStorage.setItem('smilehub_plans',JSON.stringify(TREATMENT_PLANS));
+    syncSheetField(mr, 'Treatment Plan JSON', JSON.stringify(TREATMENT_PLANS[mr]));
+    refreshProfile(mr);
+  }
 }
 function deleteTpItem(mr,idx) {
-  if(TREATMENT_PLANS[mr]){TREATMENT_PLANS[mr].splice(idx,1); localStorage.setItem('smilehub_plans',JSON.stringify(TREATMENT_PLANS)); refreshProfile(mr);}
+  if(TREATMENT_PLANS[mr]){
+    TREATMENT_PLANS[mr].splice(idx,1);
+    localStorage.setItem('smilehub_plans',JSON.stringify(TREATMENT_PLANS));
+    syncSheetField(mr, 'Treatment Plan JSON', JSON.stringify(TREATMENT_PLANS[mr]));
+    refreshProfile(mr);
+  }
 }
 function closeTpModal(){document.getElementById('tpModal').classList.remove('open');}
 
@@ -2267,6 +2308,7 @@ function savePayment() {
   if(!PAYMENTS[curPayMR]) PAYMENTS[curPayMR]=[];
   PAYMENTS[curPayMR].push({proc,charged,paid,method,note,date:new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})});
   localStorage.setItem('smilehub_payments',JSON.stringify(PAYMENTS));
+  syncSheetField(curPayMR, 'Payments JSON', JSON.stringify(PAYMENTS[curPayMR]));
   renderPayHistory(curPayMR);
   document.getElementById('payProc').value='';
   document.getElementById('payCharged').value='';
@@ -2404,6 +2446,7 @@ function saveLabWork() {
     patientName: f(PATIENTS.find(x=>getMR(x)===curLabMR)||{},'Patient Name')
   });
   localStorage.setItem('smilehub_lab',JSON.stringify(LAB_WORK));
+  syncSheetField(curLabMR, 'Lab Work JSON', JSON.stringify(LAB_WORK[curLabMR]));
   renderLabHistory(curLabMR);
   document.getElementById('labType').value='';
   document.getElementById('labName').value='';
@@ -2417,6 +2460,7 @@ function markLabReceived(mr, idx) {
   const today = new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
   LAB_WORK[mr][idx].received = today;
   localStorage.setItem('smilehub_lab',JSON.stringify(LAB_WORK));
+  syncSheetField(mr, 'Lab Work JSON', JSON.stringify(LAB_WORK[mr]));
   renderLabHistory(mr);
 }
 
@@ -2424,6 +2468,7 @@ function toggleLabPay(mr, idx) {
   if(LAB_WORK[mr] && LAB_WORK[mr][idx]) {
     LAB_WORK[mr][idx].payStatus = LAB_WORK[mr][idx].payStatus === 'paid' ? 'unpaid' : 'paid';
     localStorage.setItem('smilehub_lab', JSON.stringify(LAB_WORK));
+    syncSheetField(mr, 'Lab Work JSON', JSON.stringify(LAB_WORK[mr]));
     renderLabHistory(mr);
   }
 }
