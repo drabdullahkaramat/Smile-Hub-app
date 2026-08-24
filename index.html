@@ -457,7 +457,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;pos
       <div id="slotStatus" style="font-size:11px;color:var(--mu);margin-top:5px"></div>
     </div>
     <div class="fG"><label class="fL">Doctor</label>
-      <select class="fS" id="aDoc"><option>Dr. Abdullah</option><option>Dr. Athar</option><option>Dr. Hussain</option><option>Dr. Asim</option></select>
+      <select class="fS" id="aDoc" onchange="updateAvailableSlots()"><option>Dr. Abdullah</option><option>Dr. Athar</option><option>Dr. Hussain</option><option>Dr. Asim</option></select>
     </div>
     <div class="fG"><label class="fL">Treatment</label><input class="fI" id="aTreat" placeholder="e.g. RCT, Scaling"></div>
     <div class="fG"><label class="fL">Status</label>
@@ -465,6 +465,10 @@ html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;pos
     </div>
     <div id="newPF">
       <div class="syncBar" style="margin-bottom:10px">🆕 New patient — fill details below</div>
+      <button type="button" id="voiceEntryBtn" onclick="toggleVoiceEntry()" style="width:100%;padding:11px;border-radius:12px;border:1.5px solid var(--teal);background:rgba(75,191,176,.08);color:var(--teal-d);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:6px">
+        <span id="voiceEntryIcon">🎤</span> <span id="voiceEntryLabel">Speak patient details</span>
+      </button>
+      <div id="voiceEntryNote" style="font-size:10px;color:var(--muted);margin-bottom:10px;text-align:center"></div>
       <div class="fR">
         <div class="fG"><label class="fL">MR Number</label><input class="fI" id="aMR" readonly style="background:#f7fafc;color:var(--navy);font-weight:700"></div>
         <div class="fG"><label class="fL">Gender</label><select class="fS" id="aGen"><option value="">Select</option><option>Male</option><option>Female</option><option>Other</option></select></div>
@@ -761,6 +765,29 @@ html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;pos
 const CLIENT_ID  = '1076009437085-tn1ouassn5q8rofv9jv6uvfgbaf4cior.apps.googleusercontent.com';
 const CAL_ID     = 'dr.abdullahkaramat@gmail.com'; // fallback, overridden after login
 let ACTIVE_CAL_ID = 'dr.abdullahkaramat@gmail.com'; // set dynamically after sign-in
+
+// Which physical Google Calendar each doctor's appointments belong to.
+// This is what makes a single shared login (e.g. front-desk PC) route
+// each booking to the correct doctor's calendar based on the Doctor
+// field, instead of everything landing on whoever is signed in.
+// NOTE: Dr. Asim is mapped to the shared Unit 2 calendar as a default.
+const DOCTOR_CAL_MAP = {
+  'Dr. Abdullah': 'dr.abdullahkaramat@gmail.com',
+  'Dr. Athar': 'smilehubclinics7@gmail.com',
+  'Dr. Hussain': 'smilehubclinics7@gmail.com',
+  'Dr. Asim': 'smilehubclinics7@gmail.com'
+};
+const ALL_CLINIC_CALS = ['dr.abdullahkaramat@gmail.com', 'smilehubclinics7@gmail.com'];
+
+function calIdForDoctor(doctor) {
+  return DOCTOR_CAL_MAP[doctor] || 'primary';
+}
+function clinicHoursForDoctor(doctor) {
+  const calId = calIdForDoctor(doctor);
+  return calId.includes('smilehubclinics7')
+    ? [{start:10*60, end:14*60}, {start:18*60, end:21*60}]
+    : [{start:18*60, end:21*60}];
+}
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx1fI8vCrgSuKrRVaiJhDOzsVU-rwO-IrpnCJ6ibhJYCRR9khTg1XZFtOu0AP3KhEcxvA/exec';
 
 // Writes one field to the patient's sheet row so it's shared across every
@@ -1091,7 +1118,10 @@ async function fetchEvents() {
   const s = new Date(now); s.setHours(0,0,0,0);
   const e = new Date(now); e.setHours(23,59,59,0);
   try {
-    return await fetchCalEvents('primary', s.toISOString(), e.toISOString(), 50);
+    const results = await Promise.all(ALL_CLINIC_CALS.map(function(cal){
+      return fetchCalEvents(cal, s.toISOString(), e.toISOString(), 50);
+    }));
+    return results.flat();
   } catch(err) { console.error('fetchEvents:', err); return []; }
 }
 
@@ -1100,7 +1130,10 @@ async function fetchAllEvents() {
   const s = new Date(now); s.setHours(0,0,0,0);
   const e = new Date(now); e.setDate(e.getDate()+30);
   try {
-    return await fetchCalEvents('primary', s.toISOString(), e.toISOString(), 200);
+    const results = await Promise.all(ALL_CLINIC_CALS.map(function(cal){
+      return fetchCalEvents(cal, s.toISOString(), e.toISOString(), 200);
+    }));
+    return results.flat();
   } catch(e) { return []; }
 }
 
@@ -1135,7 +1168,7 @@ async function updateCalEvent(eventId, calId, summary, startISO, endISO) {
 }
 
 async function addCalEvent(summary, startISO, endISO, desc, doctor) {
-  const calId = 'primary';
+  const calId = calIdForDoctor(doctor);
   try {
     const r = await fetch(
       `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events`,
@@ -1247,6 +1280,7 @@ function evCardHTML(ev) {
     ? `<button class="iBtn" style="background:rgba(59,130,246,.1);color:#3b82f6" data-phone="${phoneClean}" data-name="${nameClean}" data-time="${timeClean}" onclick="event.stopPropagation();sendSMS(this.dataset.phone,this.dataset.name,this.dataset.time)" title="SMS">📱</button>`
     : `<button class="iBtn" style="background:rgba(59,130,246,.1);color:#3b82f6;opacity:.3" disabled>📱</button>`;
   const evId = ev.id || '';
+  const evCalId = ev._calId || 'primary';
   const isU2 = (ev._calId||'').includes('smilehubclinics7');
   return `<div class="apC ${unc?'unc':''} ${isU2?'u2':''}" data-mr="${mr}" data-name="${pName.replace(/"/g,'')}" data-evid="${evId}" onclick="handleCard(this)">
     ${med?'<div class="aDot"></div>':''}
@@ -1256,8 +1290,8 @@ function evCardHTML(ev) {
       ${waBtn}
       ${smsBtn}
       <button class="iBtn vwB" onclick="event.stopPropagation();handleCard(this.closest('.apC'))">👤</button>
-      <button class="iBtn" style="background:rgba(221,107,32,.1);color:var(--orange)" onclick="event.stopPropagation();openEditAppt('${evId}','${pName.replace(/'/g,'')}','${sISO||''}','${treat.replace(/'/g,'')}')">✏</button>
-      <button class="iBtn" style="background:rgba(229,62,62,.1);color:var(--red)" onclick="event.stopPropagation();confirmDelAppt('${evId}','${pName.replace(/'/g,'')}')">🗑</button>
+      <button class="iBtn" style="background:rgba(221,107,32,.1);color:var(--orange)" onclick="event.stopPropagation();openEditAppt('${evId}','${pName.replace(/'/g,'')}','${sISO||''}','${treat.replace(/'/g,'')}','${evCalId}')">✏</button>
+      <button class="iBtn" style="background:rgba(229,62,62,.1);color:var(--red)" onclick="event.stopPropagation();confirmDelAppt('${evId}','${pName.replace(/'/g,'')}','${evCalId}')">🗑</button>
     </div>
   </div>`;
 }
@@ -1896,10 +1930,13 @@ function fRc(f,el){rcF=f; document.querySelectorAll('#rcF .chip').forEach(c=>c.c
 // DELETE / EDIT APPOINTMENT
 // ═══════════════════════════════════════
 let curDelEvId = null;
+let curDelCalId = null;
 let curEditEvId = null;
+let curEditCalId = null;
 
-function confirmDelAppt(evId, name) {
+function confirmDelAppt(evId, name, calId) {
   curDelEvId = evId;
+  curDelCalId = calId || 'primary';
   document.getElementById('delApptMsg').textContent = `Delete ${name}'s appointment from Google Calendar? This cannot be undone.`;
   document.getElementById('delApptModal').classList.add('open');
 }
@@ -1918,9 +1955,9 @@ async function doDelAppt() {
 
 function closeDelAppt() { document.getElementById('delApptModal').classList.remove('open'); }
 
-function openEditAppt(evId, name, startISO, treat) {
+function openEditAppt(evId, name, startISO, treat, calId) {
   curEditEvId = evId;
-  curEditCalId = 'primary';
+  curEditCalId = calId || 'primary';
   document.getElementById('eaName').value = name || '';
   document.getElementById('eaTreat').value = treat || '';
   if (startISO) {
@@ -2009,15 +2046,11 @@ async function updateAvailableSlots() {
     return;
   }
 
-  // Determine clinic hours based on signed-in account
-  // Check both ACTIVE_CAL_ID and localStorage fallback
-  const savedCal = localStorage.getItem('sh_cal_id') || '';
-  const activeCal = ACTIVE_CAL_ID || savedCal;
-  const isClinics = activeCal.includes('smilehubclinics7');
-  console.log('Slot check - activeCal:', activeCal, '| isClinics:', isClinics);
-  const periods = isClinics
-    ? [{start:10*60, end:14*60}, {start:18*60, end:21*60}]
-    : [{start:18*60, end:21*60}];
+  // Clinic hours depend on which doctor is selected, not who's signed in —
+  // this is what lets one shared login (e.g. front-desk PC) book correctly
+  // for every doctor.
+  const selectedDoctor = document.getElementById('aDoc').value;
+  const periods = clinicHoursForDoctor(selectedDoctor);
 
   if (!token) {
     // No token - show all slots without calendar check
@@ -2040,8 +2073,9 @@ async function updateAvailableSlots() {
   try {
     var s = new Date(date + 'T00:00:00');
     var e = new Date(date + 'T23:59:59');
+    var slotCalId = calIdForDoctor(selectedDoctor);
     var r = await fetch(
-      'https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin='+s.toISOString()+'&timeMax='+e.toISOString()+'&orderBy=startTime&singleEvents=true',
+      'https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(slotCalId)+'/events?timeMin='+s.toISOString()+'&timeMax='+e.toISOString()+'&orderBy=startTime&singleEvents=true',
       {headers:{Authorization:'Bearer '+token}}
     );
     var d = await r.json();
@@ -2161,6 +2195,146 @@ async function pickContact() {
   }
 }
 
+// ═══════════════════════════════════════
+// VOICE ENTRY — speak new patient details in one go
+// ═══════════════════════════════════════
+let voiceRecognition = null;
+let voiceListening = false;
+
+const VOICE_REFERRALS = ['Word of Mouth','Instagram','Facebook','Google','Doctor Referral','Patient Referral','Walk-in','Other'];
+
+function toggleVoiceEntry() {
+  const note = document.getElementById('voiceEntryNote');
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    note.innerHTML = '<span style="color:var(--orange)">⚠ Voice entry needs Android Chrome — type the fields below instead.</span>';
+    return;
+  }
+  if (voiceListening) {
+    if (voiceRecognition) voiceRecognition.stop();
+    return;
+  }
+
+  voiceRecognition = new SR();
+  voiceRecognition.lang = 'en-US';
+  voiceRecognition.continuous = false;
+  voiceRecognition.interimResults = false;
+
+  const icon = document.getElementById('voiceEntryIcon');
+  const label = document.getElementById('voiceEntryLabel');
+  const btn = document.getElementById('voiceEntryBtn');
+
+  voiceRecognition.onstart = function() {
+    voiceListening = true;
+    icon.textContent = '🔴';
+    label.textContent = 'Listening… tap to stop';
+    btn.style.borderColor = 'var(--red)';
+    btn.style.background = 'rgba(229,62,62,.08)';
+    btn.style.color = 'var(--red)';
+    note.innerHTML = '<span style="color:var(--muted)">Speak: name, gender, medical history, referred by…</span>';
+  };
+
+  voiceRecognition.onresult = function(e) {
+    const transcript = e.results[0][0].transcript;
+    parseVoiceEntry(transcript);
+  };
+
+  voiceRecognition.onerror = function(e) {
+    if (e.error === 'no-speech') {
+      note.innerHTML = '<span style="color:var(--orange)">⚠ Didn&#39;t catch that — tap the mic and try again.</span>';
+    } else if (e.error === 'not-allowed' || e.error === 'permission-denied') {
+      note.innerHTML = '<span style="color:var(--red)">⚠ Microphone permission denied.</span>';
+    } else {
+      note.innerHTML = '<span style="color:var(--red)">⚠ Voice error: ' + e.error + '</span>';
+    }
+  };
+
+  voiceRecognition.onend = function() {
+    voiceListening = false;
+    icon.textContent = '🎤';
+    label.textContent = 'Speak patient details';
+    btn.style.borderColor = 'var(--teal)';
+    btn.style.background = 'rgba(75,191,176,.08)';
+    btn.style.color = 'var(--teal-d)';
+  };
+
+  try {
+    voiceRecognition.start();
+  } catch(err) {
+    note.innerHTML = '<span style="color:var(--red)">⚠ Could not start microphone: ' + err.message + '</span>';
+  }
+}
+
+function parseVoiceEntry(transcript) {
+  const note = document.getElementById('voiceEntryNote');
+  const clauses = transcript.split(/,| and /i).map(c => c.trim()).filter(Boolean);
+
+  let filled = [];
+  let nameClaimed = false;
+  let medicalParts = [];
+
+  clauses.forEach((clause, idx) => {
+    const lc = clause.toLowerCase();
+
+    // Gender
+    if (/\bmale\b/.test(lc) && !/\bfemale\b/.test(lc)) {
+      document.getElementById('aGen').value = 'Male';
+      filled.push('Gender');
+      return;
+    }
+    if (/\bfemale\b/.test(lc)) {
+      document.getElementById('aGen').value = 'Female';
+      filled.push('Gender');
+      return;
+    }
+    if (/\bother\b/.test(lc) && lc.length < 15) {
+      document.getElementById('aGen').value = 'Other';
+      filled.push('Gender');
+      return;
+    }
+
+    // Referred by
+    const refMatch = VOICE_REFERRALS.find(r => lc.includes(r.toLowerCase()));
+    if (refMatch || lc.includes('referred')) {
+      const sel = document.getElementById('aRef');
+      if (refMatch) { sel.value = refMatch; filled.push('Referred By'); return; }
+    }
+
+    // No known medical history
+    if (/no allerg|no medical|none|nothing significant|not applicable/.test(lc)) {
+      medicalParts.push('None');
+      return;
+    }
+
+    // First unclaimed clause with no digits is treated as the name
+    if (!nameClaimed && idx === 0 && !/\d/.test(clause)) {
+      const nameEl = document.getElementById('aName');
+      if (!nameEl.value.trim()) {
+        nameEl.value = clause.replace(/\b\w/g, c => c.toUpperCase());
+        checkExisting(nameEl.value);
+        filled.push('Name');
+      }
+      nameClaimed = true;
+      return;
+    }
+
+    // Anything left over — treat as medical history detail
+    medicalParts.push(clause.charAt(0).toUpperCase() + clause.slice(1));
+  });
+
+  if (medicalParts.length) {
+    const medEl = document.getElementById('aMed');
+    medEl.value = medEl.value.trim() ? medEl.value.trim() + ', ' + medicalParts.join(', ') : medicalParts.join(', ');
+    filled.push('Medical History');
+  }
+
+  if (filled.length) {
+    note.innerHTML = '<span style="color:var(--teal-d)">✅ Filled: ' + filled.join(', ') + ' — check before saving</span>';
+  } else {
+    note.innerHTML = '<span style="color:var(--orange)">⚠ Heard "' + transcript + '" but couldn&#39;t match any fields — try again or type manually.</span>';
+  }
+}
+
 function checkExisting(name) {
   const p=findPat(name);
   const nf=document.getElementById('newPF'), ep=document.getElementById('existPat'), ei=document.getElementById('existInfo');
@@ -2271,6 +2445,9 @@ function resetAddForm() {
   if(newPF) newPF.style.display='block';
   const contactNote = document.getElementById('contactPickerNote');
   if(contactNote) contactNote.textContent='';
+  const voiceNote = document.getElementById('voiceEntryNote');
+  if(voiceNote) voiceNote.textContent='';
+  if(voiceListening && voiceRecognition) { try { voiceRecognition.stop(); } catch(e){} }
   // Update MR number
   const mrNums = PATIENTS.map(p=>parseInt((getMR(p)||'SH-0000').replace('SH-',''))||0);
   const nextMR = Math.max(0,...mrNums)+1;
