@@ -582,6 +582,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;pos
   <div class="sh">
     <div class="handle"></div>
     <div class="shT">Add to Treatment Plan</div>
+    <div id="tpAddedList"></div>
     <div class="fG">
       <label class="fL">Select Teeth <span style="font-size:9px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(tap to select, multiple allowed)</span></label>
       <div id="tpPicker"></div>
@@ -592,12 +593,22 @@ html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;pos
         <option value="">Select procedure</option>
       </select>
     </div>
-    <div class="fG"><label class="fL">Estimated Cost (PKR)</label><input class="fI" type="number" id="tpCost" placeholder="0"></div>
+    <div class="fR">
+      <div class="fG"><label class="fL">Cost (PKR)</label><input class="fI" type="number" id="tpCost" placeholder="0"></div>
+      <div class="fG"><label class="fL">Discount (PKR)</label>
+        <div style="display:flex;align-items:center;gap:6px">
+          <button type="button" onclick="adjustDiscount('tp',-1000)" style="width:34px;height:38px;flex-shrink:0;border-radius:9px;border:1.5px solid var(--border);background:#fff;font-size:15px;font-weight:700;color:var(--navy);cursor:pointer">−</button>
+          <input class="fI" type="number" id="tpDiscount" value="0" style="text-align:center;padding-left:4px;padding-right:4px">
+          <button type="button" onclick="adjustDiscount('tp',1000)" style="width:34px;height:38px;flex-shrink:0;border-radius:9px;border:1.5px solid var(--border);background:#fff;font-size:15px;font-weight:700;color:var(--navy);cursor:pointer">+</button>
+        </div>
+      </div>
+    </div>
     <div class="fG"><label class="fL">Priority</label>
       <select class="fS" id="tpPri"><option value="Urgent">🔴 Urgent</option><option value="Soon" selected>🟡 Soon</option><option value="Routine">🟢 Routine</option></select>
     </div>
     <div class="fG"><label class="fL">Notes</label><input class="fI" id="tpNote" placeholder="Additional notes..."></div>
-    <button class="btnP" onclick="saveTpItem()">💾 Add to Plan</button>
+    <button class="btnP" onclick="addAnotherTpItem()">➕ Add & Enter Next Procedure</button>
+    <button class="btnP" onclick="finishTpModal()" style="background:linear-gradient(135deg,var(--teal-d),var(--teal))">✅ Done</button>
     <button class="btnS" onclick="closeTpModal()">Cancel</button>
   </div>
 </div>
@@ -676,6 +687,13 @@ html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;pos
     <div class="fR">
       <div class="fG"><label class="fL">Charged (PKR)</label><input class="fI" type="number" id="payCharged" placeholder="0"></div>
       <div class="fG"><label class="fL">Paid (PKR)</label><input class="fI" type="number" id="payPaid" placeholder="0"></div>
+    </div>
+    <div class="fG"><label class="fL">Discount (PKR)</label>
+      <div style="display:flex;align-items:center;gap:6px">
+        <button type="button" onclick="adjustDiscount('pay',-1000)" style="width:34px;height:38px;flex-shrink:0;border-radius:9px;border:1.5px solid var(--border);background:#fff;font-size:15px;font-weight:700;color:var(--navy);cursor:pointer">−</button>
+        <input class="fI" type="number" id="payDiscount" value="0" style="text-align:center;padding-left:4px;padding-right:4px">
+        <button type="button" onclick="adjustDiscount('pay',1000)" style="width:34px;height:38px;flex-shrink:0;border-radius:9px;border:1.5px solid var(--border);background:#fff;font-size:15px;font-weight:700;color:var(--navy);cursor:pointer">+</button>
+      </div>
     </div>
     <div class="fG"><label class="fL">Payment Method</label>
       <select class="fS" id="payMethod"><option>Cash</option><option>Card</option><option>Bank Transfer</option><option>Cheque</option></select>
@@ -1467,10 +1485,17 @@ function renderProfile(p) {
   // Treatment plan
   const plan = TREATMENT_PLANS[mr] || [];
   const total = plan.reduce((s,i)=>s+(parseFloat(i.cost)||0),0);
+  const totalDiscount = plan.reduce((s,i)=>s+(parseFloat(i.discount)||0),0);
+  const totalAfterDiscount = total - totalDiscount;
   const planHTML = plan.length ? `
-    ${total>0?`<div class="tpTotal"><span class="tpTotalL">Total Estimated Cost</span><span class="tpTotalV">PKR ${total.toLocaleString()}</span></div>`:''}
+    ${total>0?`<div class="tpTotal" style="flex-direction:column;align-items:stretch;gap:4px">
+      <div style="display:flex;justify-content:space-between"><span class="tpTotalL">Total Cost</span><span style="font-size:13px;font-weight:600">PKR ${total.toLocaleString()}</span></div>
+      ${totalDiscount>0?`<div style="display:flex;justify-content:space-between"><span class="tpTotalL">Discount</span><span style="font-size:13px;font-weight:600;color:#fc8181">−PKR ${totalDiscount.toLocaleString()}</span></div>`:''}
+      <div style="display:flex;justify-content:space-between;border-top:1px solid rgba(255,255,255,.2);padding-top:4px;margin-top:2px"><span class="tpTotalL">Payable</span><span class="tpTotalV">PKR ${totalAfterDiscount.toLocaleString()}</span></div>
+    </div>`:''}
     ${plan.map((item,idx)=>{
       const pc=tpColor(item.proc), ps=tpSymbol(item.proc);
+      const disc=parseFloat(item.discount)||0;
       return `
     <div class="tpCard" style="border-left:4px solid ${pc}">
       <span style="width:20px;height:20px;border-radius:5px;background:${pc};color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${ps}</span>
@@ -1482,7 +1507,9 @@ function renderProfile(p) {
         </div>
       </div>
       <div style="text-align:right">
-        <div class="tpCost">PKR ${(parseFloat(item.cost)||0).toLocaleString()}</div>
+        ${disc>0?`<div style="font-size:10px;color:var(--muted);text-decoration:line-through">PKR ${(parseFloat(item.cost)||0).toLocaleString()}</div>`:''}
+        <div class="tpCost">PKR ${((parseFloat(item.cost)||0)-disc).toLocaleString()}</div>
+        ${disc>0?`<div style="font-size:9px;color:var(--red);font-weight:600">−${disc.toLocaleString()} off</div>`:''}
         <div class="tpActions" style="justify-content:flex-end;margin-top:4px">
           <button class="tpBtn tpComplete" onclick="completeTpItem('${mr}',${idx})" title="Mark done">✓</button>
           <button class="tpBtn tpDelete" onclick="deleteTpItem('${mr}',${idx})" title="Remove">✕</button>
@@ -1748,15 +1775,28 @@ async function saveNote() {
 // ═══════════════════════════════════════
 // TREATMENT PLAN
 // ═══════════════════════════════════════
+let tpAddedThisSession = [];
+
+function adjustDiscount(context, delta) {
+  const el = document.getElementById(context + 'Discount');
+  if (!el) return;
+  const val = Math.max(0, (parseFloat(el.value) || 0) + delta);
+  el.value = val;
+}
+
 function openTpModal(mr) {
   curTpMR=mr;
   const sel=document.getElementById('tpProc');
   sel.innerHTML='<option value="">Select procedure</option>'+PRICES.map(p=>`<option value="${p.name}">${p.name} (PKR ${p.price.toLocaleString()})</option>`).join('');
   document.getElementById('tpTooth').value='';
   document.getElementById('tpCost').value='';
+  document.getElementById('tpDiscount').value='0';
   document.getElementById('tpNote').value='';
+  document.getElementById('tpPri').value='Soon';
   tpSelectedTeeth=[];
+  tpAddedThisSession=[];
   renderTpPicker();
+  renderTpAddedList();
   document.getElementById('tpModal').classList.add('open');
 }
 
@@ -1805,17 +1845,58 @@ function fillTpCost(procName) {
   if(pr) document.getElementById('tpCost').value=pr.price;
 }
 
-function saveTpItem() {
+function renderTpAddedList() {
+  const el = document.getElementById('tpAddedList');
+  if (!el) return;
+  if (!tpAddedThisSession.length) { el.innerHTML=''; return; }
+  el.innerHTML = '<div style="background:rgba(75,191,176,.08);border:1px solid rgba(75,191,176,.25);border-radius:10px;padding:8px 10px;margin-bottom:10px;font-size:11px;color:var(--teal-d)"><strong>Added so far:</strong> ' + tpAddedThisSession.join(', ') + '</div>';
+}
+
+function resetTpFormFields() {
+  document.getElementById('tpTooth').value='';
+  document.getElementById('tpProc').value='';
+  document.getElementById('tpCost').value='';
+  document.getElementById('tpDiscount').value='0';
+  document.getElementById('tpNote').value='';
+  document.getElementById('tpPri').value='Soon';
+  tpSelectedTeeth=[];
+  renderTpPicker();
+}
+
+function commitTpItem() {
   const tooth=document.getElementById('tpTooth').value.trim();
   const proc=document.getElementById('tpProc').value;
   const cost=document.getElementById('tpCost').value;
+  const discount=document.getElementById('tpDiscount').value;
   const pri=document.getElementById('tpPri').value;
   const note=document.getElementById('tpNote').value.trim();
-  if(!proc){alert('Please select a procedure');return;}
+  if(!proc) return false;
   if(!TREATMENT_PLANS[curTpMR]) TREATMENT_PLANS[curTpMR]=[];
-  TREATMENT_PLANS[curTpMR].push({tooth,proc,cost:parseFloat(cost)||0,priority:pri,note,status:'Planned',date:new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short'})});
+  TREATMENT_PLANS[curTpMR].push({
+    tooth, proc,
+    cost:parseFloat(cost)||0,
+    discount:parseFloat(discount)||0,
+    priority:pri, note, status:'Planned',
+    date:new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short'})
+  });
   localStorage.setItem('smilehub_plans',JSON.stringify(TREATMENT_PLANS));
   syncSheetField(curTpMR, 'Treatment Plan JSON', JSON.stringify(TREATMENT_PLANS[curTpMR]));
+  tpAddedThisSession.push(proc + (tooth?' (Tooth '+tooth+')':''));
+  return true;
+}
+
+function addAnotherTpItem() {
+  const proc=document.getElementById('tpProc').value;
+  if(!proc){ alert('Please select a procedure'); return; }
+  commitTpItem();
+  resetTpFormFields();
+  renderTpAddedList();
+}
+
+function finishTpModal() {
+  const proc=document.getElementById('tpProc').value;
+  if (proc) commitTpItem(); // catch anything filled in but not yet added
+  tpAddedThisSession=[];
   closeTpModal();
   refreshProfile(curTpMR);
 }
@@ -1885,15 +1966,21 @@ function downloadTreatmentPlan(mr) {
   const name=f(p,'Patient Name'), doc=f(p,'Treating Doctor');
   const plan=TREATMENT_PLANS[mr]||[];
   const total=plan.reduce((s,i)=>s+(parseFloat(i.cost)||0),0);
+  const totalDiscount=plan.reduce((s,i)=>s+(parseFloat(i.discount)||0),0);
+  const payable=total-totalDiscount;
   const today=new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
 
-  const rows=plan.map((item,i)=>`
+  const rows=plan.map((item,i)=>{
+    const disc=parseFloat(item.discount)||0;
+    return `
     <tr style="background:${i%2===0?'#f8fafc':'#fff'}">
       <td style="padding:8px 12px;border:1px solid #e2e8f0">${item.tooth||'—'}</td>
       <td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">${item.proc}</td>
       <td style="padding:8px 12px;border:1px solid #e2e8f0"><span style="background:${item.priority==='Urgent'?'#fff5f5':item.priority==='Soon'?'#fffaf0':'#f0fff4'};color:${item.priority==='Urgent'?'#e53e3e':item.priority==='Soon'?'#dd6b20':'#38a169'};padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">${item.priority}</span></td>
-      <td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#1B3F6B">PKR ${(parseFloat(item.cost)||0).toLocaleString()}</td>
-    </tr>`).join('');
+      <td style="padding:8px 12px;border:1px solid #e2e8f0">${(parseFloat(item.cost)||0).toLocaleString()}</td>
+      <td style="padding:8px 12px;border:1px solid #e2e8f0;color:#e53e3e">${disc>0?'−'+disc.toLocaleString():'—'}</td>
+      <td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#1B3F6B">PKR ${((parseFloat(item.cost)||0)-disc).toLocaleString()}</td>
+    </tr>`;}).join('');
 
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Treatment Plan - ${name}</title>
   <style>body{font-family:Arial,sans-serif;max-width:700px;margin:0 auto;padding:30px;color:#1a2332}
@@ -1905,7 +1992,7 @@ function downloadTreatmentPlan(mr) {
   .pVal{font-size:14px;font-weight:600}
   table{width:100%;border-collapse:collapse;margin-bottom:20px}
   th{background:#1B3F6B;color:#fff;padding:10px 12px;text-align:left;font-size:12px}
-  .total{background:linear-gradient(135deg,#122d4e,#1B3F6B);color:#fff;border-radius:10px;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
+  .total{background:linear-gradient(135deg,#122d4e,#1B3F6B);color:#fff;border-radius:10px;padding:16px 20px;margin-bottom:24px}
   .footer{text-align:center;font-size:11px;color:#6b7a8d;border-top:1px solid #e2e8f0;padding-top:16px;margin-top:24px}
   .sig{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:40px}
   .sigLine{border-top:1px solid #2d3748;padding-top:8px;font-size:11px;color:#6b7a8d;text-align:center}
@@ -1919,8 +2006,12 @@ function downloadTreatmentPlan(mr) {
   </div>
   ${buildTpDiagramHTML(plan)}
   ${plan.length?`
-  <table><thead><tr><th>Tooth</th><th>Procedure</th><th>Priority</th><th>Est. Cost</th></tr></thead><tbody>${rows}</tbody></table>
-  <div class="total"><span style="font-size:14px">Total Estimated Cost</span><span style="font-size:22px;font-weight:700">PKR ${total.toLocaleString()}</span></div>`:'<p style="color:#6b7a8d;text-align:center;padding:20px">No treatment plan items added yet.</p>'}
+  <table><thead><tr><th>Tooth</th><th>Procedure</th><th>Priority</th><th>Cost</th><th>Discount</th><th>Payable</th></tr></thead><tbody>${rows}</tbody></table>
+  <div class="total">
+    <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Total Cost:</span><span style="font-weight:600">PKR ${total.toLocaleString()}</span></div>
+    ${totalDiscount>0?`<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Total Discount:</span><span style="font-weight:600;color:#fc8181">−PKR ${totalDiscount.toLocaleString()}</span></div>`:''}
+    <div style="display:flex;justify-content:space-between;border-top:1px solid rgba(255,255,255,.25);padding-top:8px"><span style="font-size:15px">Payable Amount:</span><span style="font-size:22px;font-weight:700">PKR ${payable.toLocaleString()}</span></div>
+  </div>`:'<p style="color:#6b7a8d;text-align:center;padding:20px">No treatment plan items added yet.</p>'}
   <p style="font-size:11px;color:#6b7a8d;font-style:italic">* This treatment plan is an estimate and may be revised based on clinical findings. Final costs may vary.</p>
   ${pdfSignatureHTML()}
   <div class="footer">Smile Hub Clinics · Johar Town, Lahore · Generated: ${today}</div>
@@ -2728,8 +2819,9 @@ function handleBotMessage(text) {
     const mr = getMR(p);
     const pays = PAYMENTS[mr]||[];
     const charged = pays.reduce(function(s,x){return s+(parseFloat(x.charged)||0);},0);
+    const discount = pays.reduce(function(s,x){return s+(parseFloat(x.discount)||0);},0);
     const paid = pays.reduce(function(s,x){return s+(parseFloat(x.paid)||0);},0);
-    addBotMessage('bot', f(p,'Patient Name') + ' — Balance: PKR ' + (charged-paid).toLocaleString());
+    addBotMessage('bot', f(p,'Patient Name') + ' — Balance: PKR ' + ((charged-discount-paid)).toLocaleString());
     return;
   }
   if (lc.indexOf('slots') > -1) {
@@ -3145,6 +3237,7 @@ function openPayModal(mr) {
   document.getElementById('payProc').value = '';
   document.getElementById('payCharged').value = '';
   document.getElementById('payPaid').value = '';
+  document.getElementById('payDiscount').value = '0';
   document.getElementById('payMethod').value = 'Cash';
   document.getElementById('payNote').value = '';
   renderPayHistory(mr);
@@ -3154,40 +3247,46 @@ function openPayModal(mr) {
 function renderPayHistory(mr) {
   const payments = PAYMENTS[mr] || [];
   const total_charged = payments.reduce((s,p)=>s+(parseFloat(p.charged)||0),0);
+  const total_discount = payments.reduce((s,p)=>s+(parseFloat(p.discount)||0),0);
   const total_paid = payments.reduce((s,p)=>s+(parseFloat(p.paid)||0),0);
-  const balance = total_charged - total_paid;
+  const balance = (total_charged - total_discount) - total_paid;
   const el = document.getElementById('payHistory');
   el.innerHTML = payments.length ? `
-    <div style="background:var(--navy);color:#fff;border-radius:10px;padding:10px 14px;margin-bottom:10px;display:flex;justify-content:space-between">
-      <div><div style="font-size:10px;opacity:.7">TOTAL CHARGED</div><div style="font-weight:700">PKR ${total_charged.toLocaleString()}</div></div>
-      <div><div style="font-size:10px;opacity:.7">TOTAL PAID</div><div style="font-weight:700">PKR ${total_paid.toLocaleString()}</div></div>
-      <div><div style="font-size:10px;opacity:.7">BALANCE</div><div style="font-weight:700;color:${balance>0?'#fc8181':'#68d391'}"">PKR ${balance.toLocaleString()}</div></div>
+    <div style="background:var(--navy);color:#fff;border-radius:10px;padding:10px 14px;margin-bottom:10px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px">
+      <div><div style="font-size:10px;opacity:.7">CHARGED</div><div style="font-weight:700">PKR ${total_charged.toLocaleString()}</div></div>
+      ${total_discount>0?`<div><div style="font-size:10px;opacity:.7">DISCOUNT</div><div style="font-weight:700;color:#fc8181">−PKR ${total_discount.toLocaleString()}</div></div>`:''}
+      <div><div style="font-size:10px;opacity:.7">PAID</div><div style="font-weight:700">PKR ${total_paid.toLocaleString()}</div></div>
+      <div><div style="font-size:10px;opacity:.7">BALANCE</div><div style="font-weight:700;color:${balance>0?'#fc8181':'#68d391'}">PKR ${balance.toLocaleString()}</div></div>
     </div>
-    ${payments.slice().reverse().map((pay,i)=>`
+    ${payments.slice().reverse().map((pay,i)=>{
+      const disc=parseFloat(pay.discount)||0;
+      return `
     <div style="background:var(--card);border-radius:9px;padding:10px 12px;margin-bottom:7px;border:1px solid var(--border);font-size:12px">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <div><strong>${pay.proc||'General'}</strong> · ${pay.date}</div>
-        <div style="text-align:right"><div style="color:var(--navy);font-weight:700">PKR ${(parseFloat(pay.paid)||0).toLocaleString()}</div><div style="color:var(--muted);font-size:10px">of PKR ${(parseFloat(pay.charged)||0).toLocaleString()}</div></div>
+        <div style="text-align:right"><div style="color:var(--navy);font-weight:700">PKR ${(parseFloat(pay.paid)||0).toLocaleString()}</div><div style="color:var(--muted);font-size:10px">of PKR ${(parseFloat(pay.charged)||0).toLocaleString()}${disc>0?' (−'+disc.toLocaleString()+' off)':''}</div></div>
       </div>
       <div style="color:var(--muted);margin-top:3px">${pay.method}${pay.note?' · '+pay.note:''}</div>
-    </div>`).join('')}` : '<div style="color:var(--muted);font-size:12px;text-align:center;padding:12px">No payments recorded yet</div>';
+    </div>`;}).join('')}` : '<div style="color:var(--muted);font-size:12px;text-align:center;padding:12px">No payments recorded yet</div>';
 }
 
 function savePayment() {
   const proc = document.getElementById('payProc').value.trim();
   const charged = parseFloat(document.getElementById('payCharged').value)||0;
   const paid = parseFloat(document.getElementById('payPaid').value)||0;
+  const discount = parseFloat(document.getElementById('payDiscount').value)||0;
   const method = document.getElementById('payMethod').value;
   const note = document.getElementById('payNote').value.trim();
   if(!charged && !paid){alert('Enter charged or paid amount');return;}
   if(!PAYMENTS[curPayMR]) PAYMENTS[curPayMR]=[];
-  PAYMENTS[curPayMR].push({proc,charged,paid,method,note,date:new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})});
+  PAYMENTS[curPayMR].push({proc,charged,paid,discount,method,note,date:new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})});
   localStorage.setItem('smilehub_payments',JSON.stringify(PAYMENTS));
   syncSheetField(curPayMR, 'Payments JSON', JSON.stringify(PAYMENTS[curPayMR]));
   renderPayHistory(curPayMR);
   document.getElementById('payProc').value='';
   document.getElementById('payCharged').value='';
   document.getElementById('payPaid').value='';
+  document.getElementById('payDiscount').value='0';
   document.getElementById('payNote').value='';
   updateRevenueStats();
 }
@@ -3199,10 +3298,13 @@ function generateReceipt(mr) {
   if(!p) return;
   const name=f(p,'Patient Name'), payments=PAYMENTS[mr]||[];
   const total_charged=payments.reduce((s,pay)=>s+(parseFloat(pay.charged)||0),0);
+  const total_discount=payments.reduce((s,pay)=>s+(parseFloat(pay.discount)||0),0);
   const total_paid=payments.reduce((s,pay)=>s+(parseFloat(pay.paid)||0),0);
-  const balance=total_charged-total_paid;
+  const balance=(total_charged-total_discount)-total_paid;
   const today=new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
-  const rows=payments.map((pay,i)=>`<tr style="background:${i%2===0?'#f8fafc':'#fff'}"><td style="padding:8px 12px;border:1px solid #e2e8f0">${pay.date}</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${pay.proc||'General'}</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${pay.method}</td><td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:right">PKR ${(parseFloat(pay.charged)||0).toLocaleString()}</td><td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:right;color:#38a169;font-weight:600">PKR ${(parseFloat(pay.paid)||0).toLocaleString()}</td></tr>`).join('');
+  const rows=payments.map((pay,i)=>{
+    const disc=parseFloat(pay.discount)||0;
+    return `<tr style="background:${i%2===0?'#f8fafc':'#fff'}"><td style="padding:8px 12px;border:1px solid #e2e8f0">${pay.date}</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${pay.proc||'General'}</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${pay.method}</td><td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:right">PKR ${(parseFloat(pay.charged)||0).toLocaleString()}</td><td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:right;color:#e53e3e">${disc>0?'−'+disc.toLocaleString():'—'}</td><td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:right;color:#38a169;font-weight:600">PKR ${(parseFloat(pay.paid)||0).toLocaleString()}</td></tr>`;}).join('');
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Receipt - ${name}</title>
   <style>body{font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:30px;color:#1a2332}.header{text-align:center;border-bottom:3px solid #1B3F6B;padding-bottom:16px;margin-bottom:20px}.logo{font-size:22px;font-weight:700;color:#1B3F6B}.sub{font-size:11px;color:#6b7a8d;margin-top:3px}table{width:100%;border-collapse:collapse;margin:16px 0}th{background:#1B3F6B;color:#fff;padding:8px 12px;text-align:left;font-size:11px}.summary{background:#f8fafc;border-radius:8px;padding:14px;margin-top:14px}.footer{text-align:center;font-size:10px;color:#6b7a8d;margin-top:20px;border-top:1px solid #e2e8f0;padding-top:14px}</style>
   </head><body>
@@ -3213,9 +3315,10 @@ function generateReceipt(mr) {
     <div style="background:#f8fafc;border-radius:8px;padding:10px"><div style="font-size:10px;color:#6b7a8d;font-weight:700;text-transform:uppercase">Date</div><div style="font-size:14px;font-weight:600">${today}</div></div>
     <div style="background:#f8fafc;border-radius:8px;padding:10px"><div style="font-size:10px;color:#6b7a8d;font-weight:700;text-transform:uppercase">Doctor</div><div style="font-size:14px;font-weight:600">${f(p,'Treating Doctor')||'Dr. Abdullah Karamat'}</div></div>
   </div>
-  <table><thead><tr><th>Date</th><th>Procedure</th><th>Method</th><th style="text-align:right">Charged</th><th style="text-align:right">Paid</th></tr></thead><tbody>${rows}</tbody></table>
+  <table><thead><tr><th>Date</th><th>Procedure</th><th>Method</th><th style="text-align:right">Charged</th><th style="text-align:right">Discount</th><th style="text-align:right">Paid</th></tr></thead><tbody>${rows}</tbody></table>
   <div class="summary">
     <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Total Charged:</span><span style="font-weight:600">PKR ${total_charged.toLocaleString()}</span></div>
+    ${total_discount>0?`<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Total Discount:</span><span style="font-weight:600;color:#e53e3e">−PKR ${total_discount.toLocaleString()}</span></div>`:''}
     <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Total Paid:</span><span style="font-weight:600;color:#38a169">PKR ${total_paid.toLocaleString()}</span></div>
     <div style="display:flex;justify-content:space-between;border-top:1px solid #e2e8f0;padding-top:8px;margin-top:4px"><span style="font-weight:700">Balance Due:</span><span style="font-weight:700;color:${balance>0?'#e53e3e':'#38a169'}">PKR ${balance.toLocaleString()}</span></div>
   </div>
@@ -3232,8 +3335,9 @@ function updateRevenueStats() {
     const pays = PAYMENTS[getMR(p)] || [];
     pays.forEach(pay => { if(pay.date === today) todayRev += parseFloat(pay.paid)||0; });
     const charged = pays.reduce((s,pay)=>s+(parseFloat(pay.charged)||0),0);
+    const discount = pays.reduce((s,pay)=>s+(parseFloat(pay.discount)||0),0);
     const paid = pays.reduce((s,pay)=>s+(parseFloat(pay.paid)||0),0);
-    totalBal += Math.max(0, charged - paid);
+    totalBal += Math.max(0, charged - discount - paid);
   });
   const rEl = document.getElementById('stRev');
   const bEl = document.getElementById('stBal');
@@ -3250,15 +3354,17 @@ function renderBalances() {
   const withBal = PATIENTS.filter(p => {
     const pays = PAYMENTS[getMR(p)] || [];
     const charged = pays.reduce((s,pay)=>s+(parseFloat(pay.charged)||0),0);
+    const discount = pays.reduce((s,pay)=>s+(parseFloat(pay.discount)||0),0);
     const paid = pays.reduce((s,pay)=>s+(parseFloat(pay.paid)||0),0);
-    return (charged - paid) > 0;
+    return (charged - discount - paid) > 0;
   });
   if(!withBal.length){el.innerHTML='<div class="empty"><div class="emIco">✅</div><div class="emTxt">No outstanding balances</div></div>';return;}
   el.innerHTML = withBal.map(p => {
     const pays = PAYMENTS[getMR(p)] || [];
     const charged = pays.reduce((s,pay)=>s+(parseFloat(pay.charged)||0),0);
+    const discount = pays.reduce((s,pay)=>s+(parseFloat(pay.discount)||0),0);
     const paid = pays.reduce((s,pay)=>s+(parseFloat(pay.paid)||0),0);
-    const bal = charged - paid;
+    const bal = charged - discount - paid;
     return `<div class="pC" onclick="openPayModal('${getMR(p)}')">
       <div class="pAv" style="background:linear-gradient(135deg,var(--red),#fc8181)">${f(p,'Patient Name').charAt(0)}</div>
       <div style="flex:1"><div class="pNm">${f(p,'Patient Name')}</div><div class="pSb">${getMR(p)} · ${getPhone(p)||'No phone'}</div></div>
@@ -3494,17 +3600,22 @@ function downloadPatientRecord(mr) {
   const pays=PAYMENTS[mr]||[];
   const labs=LAB_WORK[mr]||[];
   const total_charged=pays.reduce((s,pay)=>s+(parseFloat(pay.charged)||0),0);
+  const total_pay_discount=pays.reduce((s,pay)=>s+(parseFloat(pay.discount)||0),0);
   const total_paid=pays.reduce((s,pay)=>s+(parseFloat(pay.paid)||0),0);
-  const balance=total_charged-total_paid;
+  const balance=total_charged-total_pay_discount-total_paid;
 
   const notesHTML = notes ? notes.split('\n').filter(Boolean).map(line=>{
     const i=line.indexOf(':');
     return i>0?`<tr><td style="padding:7px 12px;border:1px solid #e2e8f0;color:#6b7a8d;font-weight:600;white-space:nowrap">${line.substring(0,i).trim()}</td><td style="padding:7px 12px;border:1px solid #e2e8f0">${line.substring(i+1).trim()}</td></tr>`:'';
   }).join('') : '<tr><td colspan="2" style="padding:10px;text-align:center;color:#6b7a8d">No notes recorded</td></tr>';
 
-  const planHTML = plan.length ? plan.map(item=>`<tr><td style="padding:7px 12px;border:1px solid #e2e8f0">${item.tooth||'—'}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;font-weight:600">${item.proc}</td><td style="padding:7px 12px;border:1px solid #e2e8f0">${item.priority}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;text-align:right">PKR ${(parseFloat(item.cost)||0).toLocaleString()}</td></tr>`).join('') : '<tr><td colspan="4" style="padding:10px;text-align:center;color:#6b7a8d">No treatment plan</td></tr>';
+  const planHTML = plan.length ? plan.map(item=>{
+    const disc=parseFloat(item.discount)||0;
+    return `<tr><td style="padding:7px 12px;border:1px solid #e2e8f0">${item.tooth||'—'}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;font-weight:600">${item.proc}</td><td style="padding:7px 12px;border:1px solid #e2e8f0">${item.priority}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;text-align:right;color:#e53e3e">${disc>0?'−'+disc.toLocaleString():'—'}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;text-align:right">PKR ${((parseFloat(item.cost)||0)-disc).toLocaleString()}</td></tr>`;}).join('') : '<tr><td colspan="5" style="padding:10px;text-align:center;color:#6b7a8d">No treatment plan</td></tr>';
 
-  const payHTML = pays.length ? pays.map(pay=>`<tr><td style="padding:7px 12px;border:1px solid #e2e8f0">${pay.date}</td><td style="padding:7px 12px;border:1px solid #e2e8f0">${pay.proc||'General'}</td><td style="padding:7px 12px;border:1px solid #e2e8f0">PKR ${(parseFloat(pay.charged)||0).toLocaleString()}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;color:#38a169;font-weight:600">PKR ${(parseFloat(pay.paid)||0).toLocaleString()}</td></tr>`).join('') : '<tr><td colspan="4" style="padding:10px;text-align:center;color:#6b7a8d">No payments recorded</td></tr>';
+  const payHTML = pays.length ? pays.map(pay=>{
+    const disc=parseFloat(pay.discount)||0;
+    return `<tr><td style="padding:7px 12px;border:1px solid #e2e8f0">${pay.date}</td><td style="padding:7px 12px;border:1px solid #e2e8f0">${pay.proc||'General'}</td><td style="padding:7px 12px;border:1px solid #e2e8f0">PKR ${(parseFloat(pay.charged)||0).toLocaleString()}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;color:#e53e3e">${disc>0?'−'+disc.toLocaleString():'—'}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;color:#38a169;font-weight:600">PKR ${(parseFloat(pay.paid)||0).toLocaleString()}</td></tr>`;}).join('') : '<tr><td colspan="5" style="padding:10px;text-align:center;color:#6b7a8d">No payments recorded</td></tr>';
 
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Patient Record - ${name}</title>
   <style>body{font-family:Arial,sans-serif;max-width:750px;margin:0 auto;padding:30px;color:#1a2332;font-size:13px}
@@ -3543,12 +3654,13 @@ function downloadPatientRecord(mr) {
   <table><thead><tr><th>Date</th><th>Procedure / Notes</th></tr></thead><tbody>${notesHTML}</tbody></table>
 
   <div class="sec">Treatment Plan</div>
-  <table><thead><tr><th>Tooth</th><th>Procedure</th><th>Priority</th><th style="text-align:right">Est. Cost</th></tr></thead><tbody>${planHTML}</tbody></table>
+  <table><thead><tr><th>Tooth</th><th>Procedure</th><th>Priority</th><th style="text-align:right">Discount</th><th style="text-align:right">Payable</th></tr></thead><tbody>${planHTML}</tbody></table>
 
   <div class="sec">Payment History</div>
-  <table><thead><tr><th>Date</th><th>Procedure</th><th>Charged</th><th>Paid</th></tr></thead><tbody>${payHTML}</tbody></table>
+  <table><thead><tr><th>Date</th><th>Procedure</th><th>Charged</th><th>Discount</th><th>Paid</th></tr></thead><tbody>${payHTML}</tbody></table>
   ${pays.length?`<div class="summary">
     <div style="display:flex;justify-content:space-between;margin-bottom:5px"><span>Total Charged:</span><span style="font-weight:600">PKR ${total_charged.toLocaleString()}</span></div>
+    ${total_pay_discount>0?`<div style="display:flex;justify-content:space-between;margin-bottom:5px"><span>Total Discount:</span><span style="font-weight:600;color:#e53e3e">−PKR ${total_pay_discount.toLocaleString()}</span></div>`:''}
     <div style="display:flex;justify-content:space-between;margin-bottom:5px"><span>Total Paid:</span><span style="font-weight:600;color:#38a169">PKR ${total_paid.toLocaleString()}</span></div>
     <div style="display:flex;justify-content:space-between;border-top:1px solid #e2e8f0;padding-top:8px"><span style="font-weight:700">Balance Due:</span><span style="font-weight:700;color:${balance>0?'#e53e3e':'#38a169'}">PKR ${balance.toLocaleString()}</span></div>
   </div>`:''}
