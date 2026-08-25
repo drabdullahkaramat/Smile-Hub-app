@@ -2040,25 +2040,22 @@ function downloadTreatmentPlan(mr, mode) {
   if(!p){alert('Patient not found');return;}
   const name=f(p,'Patient Name'), doc=f(p,'Treating Doctor');
   const plan=TREATMENT_PLANS[mr]||[];
-  const total=plan.reduce((s,i)=>s+(parseFloat(i.cost)||0)*(parseFloat(i.qty)||1),0);
-  const totalDiscount=plan.reduce((s,i)=>s+(parseFloat(i.discount)||0),0);
+  const grouped=groupByProc(plan);
+  const total=grouped.reduce((s,g)=>s+g.totalCost,0);
+  const totalDiscount=grouped.reduce((s,g)=>s+g.discount,0);
   const payable=total-totalDiscount;
   const today=new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
 
-  const rows=plan.map((item,i)=>{
-    const disc=parseFloat(item.discount)||0;
-    const qty=parseFloat(item.qty)||1;
-    const lineTotal=(parseFloat(item.cost)||0)*qty;
-    return `
+  const rows=grouped.map((g,i)=>`
     <tr style="background:${i%2===0?'#f8fafc':'#fff'}">
-      <td style="padding:8px 12px;border:1px solid #e2e8f0">${item.tooth||'—'}</td>
-      <td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">${item.proc}</td>
-      <td style="padding:8px 12px;border:1px solid #e2e8f0"><span style="background:${item.priority==='Urgent'?'#fff5f5':item.priority==='Soon'?'#fffaf0':'#f0fff4'};color:${item.priority==='Urgent'?'#e53e3e':item.priority==='Soon'?'#dd6b20':'#38a169'};padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">${item.priority}</span></td>
-      <td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:center">${qty}</td>
-      <td style="padding:8px 12px;border:1px solid #e2e8f0">${lineTotal.toLocaleString()}</td>
-      <td style="padding:8px 12px;border:1px solid #e2e8f0;color:#e53e3e">${disc>0?'−'+disc.toLocaleString():'—'}</td>
-      <td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:700;color:#1B3F6B">PKR ${(lineTotal-disc).toLocaleString()}</td>
-    </tr>`;}).join('');
+      <td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">${g.proc}</td>
+      <td style="padding:8px 12px;border:1px solid #e2e8f0">${g.teeth||'—'}</td>
+      <td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:center">PKR ${Math.round(g.unitPrice).toLocaleString()}</td>
+      <td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:center">${g.qty}</td>
+      <td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:right">PKR ${g.totalCost.toLocaleString()}</td>
+      <td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:right;color:#e53e3e">${g.discount>0?'−'+g.discount.toLocaleString():'—'}</td>
+      <td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:right;font-weight:700;color:#1B3F6B">PKR ${g.payable.toLocaleString()}</td>
+    </tr>`).join('');
 
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Treatment Plan - ${name}</title>
   <style>body{font-family:Arial,sans-serif;max-width:700px;margin:0 auto;padding:30px;color:#1a2332}
@@ -2083,8 +2080,8 @@ function downloadTreatmentPlan(mr, mode) {
     <div class="pBox"><div class="pLbl">Treating Doctor</div><div class="pVal">${doc||'Dr. Abdullah Karamat'}</div></div>
   </div>
   ${buildTpDiagramHTML(plan)}
-  ${plan.length?`
-  <table><thead><tr><th>Tooth</th><th>Procedure</th><th>Priority</th><th>Qty</th><th>Cost</th><th>Discount</th><th>Payable</th></tr></thead><tbody>${rows}</tbody></table>
+  ${grouped.length?`
+  <table><thead><tr><th>Procedure</th><th>Tooth</th><th>Unit Price</th><th>Qty</th><th>Amount</th><th>Discount</th><th>Payable</th></tr></thead><tbody>${rows}</tbody></table>
   <div class="total">
     <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Total Cost:</span><span style="font-weight:600">PKR ${total.toLocaleString()}</span></div>
     ${totalDiscount>0?`<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Total Discount:</span><span style="font-weight:600;color:#fc8181">−PKR ${totalDiscount.toLocaleString()}</span></div>`:''}
@@ -3355,6 +3352,8 @@ function resetAddForm() {
 // ═══════════════════════════════════════
 // PAYMENTS
 // ═══════════════════════════════════════
+let payChecklistItems = []; // structured line items captured from the checklist for the current draft payment
+
 function openPayModal(mr) {
   curPayMR = mr;
   const p = PATIENTS.find(x=>getMR(x)===mr);
@@ -3365,9 +3364,43 @@ function openPayModal(mr) {
   document.getElementById('payDiscount').value = '0';
   document.getElementById('payMethod').value = 'Cash';
   document.getElementById('payNote').value = '';
+  payChecklistItems = [];
   renderPayHistory(mr);
   renderPayChecklist(mr);
   document.getElementById('payModal').classList.add('open');
+}
+
+// Groups a list of {proc, tooth, cost (unit price), qty, discount} into one
+// row per unique procedure name, summing quantity/cost/discount — so the
+// same treatment appearing more than once shows as ONE clear line instead
+// of being scattered across the document. Used by the Estimate, Invoice,
+// and Patient Record PDFs alike.
+function groupByProc(items) {
+  const map = {};
+  const order = [];
+  items.forEach(item => {
+    const key = item.proc || 'General';
+    if (!map[key]) { map[key] = { proc:key, teeth:[], qty:0, totalCost:0, discount:0 }; order.push(key); }
+    const g = map[key];
+    const qty = parseFloat(item.qty) || 1;
+    const unitCost = parseFloat(item.cost) || 0;
+    g.qty += qty;
+    g.totalCost += unitCost * qty;
+    g.discount += parseFloat(item.discount) || 0;
+    if (item.tooth) g.teeth.push(item.tooth);
+  });
+  return order.map(key => {
+    const g = map[key];
+    return {
+      proc: g.proc,
+      teeth: g.teeth.join(', '),
+      unitPrice: g.qty > 0 ? g.totalCost / g.qty : 0,
+      qty: g.qty,
+      totalCost: g.totalCost,
+      discount: g.discount,
+      payable: g.totalCost - g.discount
+    };
+  });
 }
 
 // Shows the patient's outstanding (not-yet-completed) treatment plan items
@@ -3400,23 +3433,30 @@ function renderPayChecklist(mr) {
 
 // Recomputes Procedure / Charged / Discount from whichever checklist items
 // are currently checked — fields stay editable afterward for adjustments.
+// Also stashes the structured per-procedure breakdown in payChecklistItems
+// so the saved payment carries real itemized detail, not just one flat
+// jumbled procedure string.
 function recalcPayChecklist() {
   const mr = curPayMR;
   const plan = (TREATMENT_PLANS[mr] || []).filter(i => i.status !== 'Completed');
   let totalCharged = 0, totalDiscount = 0;
   const procNames = [];
+  const items = [];
   plan.forEach((item, idx) => {
     const chk = document.getElementById('payChk' + idx);
     if (chk && chk.checked) {
       const qty = parseFloat(item.qty) || 1;
-      const lineTotal = (parseFloat(item.cost) || 0) * qty;
+      const unitCost = parseFloat(item.cost) || 0;
+      const lineTotal = unitCost * qty;
       const discEl = document.getElementById('payChkDisc' + idx);
       const disc = parseFloat(discEl ? discEl.value : 0) || 0;
       totalCharged += lineTotal;
       totalDiscount += disc;
       procNames.push(item.proc + (item.tooth ? ' (Tooth ' + item.tooth + ')' : '') + (qty>1?' ×'+qty:''));
+      items.push({ proc:item.proc, tooth:item.tooth||'', cost:unitCost, qty:qty, discount:disc });
     }
   });
+  payChecklistItems = items;
   document.getElementById('payProc').value = procNames.join(', ');
   document.getElementById('payCharged').value = totalCharged || '';
   document.getElementById('payDiscount').value = totalDiscount;
@@ -3457,9 +3497,13 @@ function savePayment() {
   const note = document.getElementById('payNote').value.trim();
   if(!charged && !paid){alert('Enter charged or paid amount');return;}
   if(!PAYMENTS[curPayMR]) PAYMENTS[curPayMR]=[];
-  PAYMENTS[curPayMR].push({proc,charged,paid,discount,method,note,date:new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})});
+  const record = {proc,charged,paid,discount,method,note,date:new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})};
+  if (payChecklistItems.length) record.items = payChecklistItems.slice();
+  PAYMENTS[curPayMR].push(record);
   localStorage.setItem('smilehub_payments',JSON.stringify(PAYMENTS));
   syncSheetField(curPayMR, 'Payments JSON', JSON.stringify(PAYMENTS[curPayMR]));
+  payChecklistItems = [];
+  renderPayChecklist(curPayMR);
   renderPayHistory(curPayMR);
   document.getElementById('payProc').value='';
   document.getElementById('payCharged').value='';
@@ -3480,11 +3524,34 @@ function generateReceipt(mr, mode) {
   const total_paid=payments.reduce((s,pay)=>s+(parseFloat(pay.paid)||0),0);
   const balance=(total_charged-total_discount)-total_paid;
   const today=new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
-  const rows=payments.map((pay,i)=>{
-    const disc=parseFloat(pay.discount)||0;
-    return `<tr style="background:${i%2===0?'#f8fafc':'#fff'}"><td style="padding:8px 12px;border:1px solid #e2e8f0">${pay.date}</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${pay.proc||'General'}</td><td style="padding:8px 12px;border:1px solid #e2e8f0">${pay.method}</td><td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:right">PKR ${(parseFloat(pay.charged)||0).toLocaleString()}</td><td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:right;color:#e53e3e">${disc>0?'−'+disc.toLocaleString():'—'}</td><td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:right;color:#38a169;font-weight:600">PKR ${(parseFloat(pay.paid)||0).toLocaleString()}</td></tr>`;}).join('');
+
+  // Itemized breakdown: every procedure across every payment, grouped by
+  // name so the same treatment never appears jumbled or repeated.
+  const allItems = [];
+  payments.forEach(pay => {
+    if (pay.items && pay.items.length) {
+      pay.items.forEach(it => allItems.push(it));
+    } else {
+      allItems.push({ proc: pay.proc || 'General', tooth:'', cost: parseFloat(pay.charged)||0, qty:1, discount: parseFloat(pay.discount)||0 });
+    }
+  });
+  const grouped = groupByProc(allItems);
+  const itemRows = grouped.map((g,i)=>`
+    <tr style="background:${i%2===0?'#f8fafc':'#fff'}">
+      <td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">${g.proc}${g.teeth?` <span style="color:#6b7a8d;font-weight:400;font-size:10px">(Tooth ${g.teeth})</span>`:''}</td>
+      <td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:center">PKR ${Math.round(g.unitPrice).toLocaleString()}</td>
+      <td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:center">${g.qty}</td>
+      <td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:right">PKR ${g.totalCost.toLocaleString()}</td>
+      <td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:right;color:#e53e3e">${g.discount>0?'−'+g.discount.toLocaleString():'—'}</td>
+      <td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:right;font-weight:700;color:#1B3F6B">PKR ${g.payable.toLocaleString()}</td>
+    </tr>`).join('');
+
+  // Simple payment log: when money actually came in, separate from the
+  // procedure breakdown above so neither table gets cluttered.
+  const txRows = payments.map((pay,i)=>`<tr style="background:${i%2===0?'#f8fafc':'#fff'}"><td style="padding:7px 12px;border:1px solid #e2e8f0">${pay.date}</td><td style="padding:7px 12px;border:1px solid #e2e8f0">${pay.method}</td><td style="padding:7px 12px;border:1px solid #e2e8f0">${pay.note||'—'}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;text-align:right;color:#38a169;font-weight:600">PKR ${(parseFloat(pay.paid)||0).toLocaleString()}</td></tr>`).join('');
+
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Receipt - ${name}</title>
-  <style>body{font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:30px;color:#1a2332}.header{text-align:center;border-bottom:3px solid #1B3F6B;padding-bottom:16px;margin-bottom:20px}.logo{font-size:22px;font-weight:700;color:#1B3F6B}.sub{font-size:11px;color:#6b7a8d;margin-top:3px}table{width:100%;border-collapse:collapse;margin:16px 0}th{background:#1B3F6B;color:#fff;padding:8px 12px;text-align:left;font-size:11px}.summary{background:#f8fafc;border-radius:8px;padding:14px;margin-top:14px}.footer{text-align:center;font-size:10px;color:#6b7a8d;margin-top:20px;border-top:1px solid #e2e8f0;padding-top:14px}</style>
+  <style>body{font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:30px;color:#1a2332}.header{text-align:center;border-bottom:3px solid #1B3F6B;padding-bottom:16px;margin-bottom:20px}.logo{font-size:22px;font-weight:700;color:#1B3F6B}.sub{font-size:11px;color:#6b7a8d;margin-top:3px}.secTitle{font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#1B3F6B;margin:18px 0 8px}table{width:100%;border-collapse:collapse;margin-bottom:6px}th{background:#1B3F6B;color:#fff;padding:8px 12px;text-align:left;font-size:11px}.summary{background:#f8fafc;border-radius:8px;padding:14px;margin-top:14px}.footer{text-align:center;font-size:10px;color:#6b7a8d;margin-top:20px;border-top:1px solid #e2e8f0;padding-top:14px}</style>
   </head><body>
   ${pdfHeaderHTML('PAYMENT RECEIPT', true)}
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
@@ -3493,12 +3560,13 @@ function generateReceipt(mr, mode) {
     <div style="background:#f8fafc;border-radius:8px;padding:10px"><div style="font-size:10px;color:#6b7a8d;font-weight:700;text-transform:uppercase">Date</div><div style="font-size:14px;font-weight:600">${today}</div></div>
     <div style="background:#f8fafc;border-radius:8px;padding:10px"><div style="font-size:10px;color:#6b7a8d;font-weight:700;text-transform:uppercase">Doctor</div><div style="font-size:14px;font-weight:600">${f(p,'Treating Doctor')||'Dr. Abdullah Karamat'}</div></div>
   </div>
-  <table><thead><tr><th>Date</th><th>Procedure</th><th>Method</th><th style="text-align:right">Charged</th><th style="text-align:right">Discount</th><th style="text-align:right">Paid</th></tr></thead><tbody>${rows}</tbody></table>
+  ${grouped.length?`<div class="secTitle">Procedures</div><table><thead><tr><th>Procedure</th><th style="text-align:center">Unit Price</th><th style="text-align:center">Qty</th><th style="text-align:right">Amount</th><th style="text-align:right">Discount</th><th style="text-align:right">Payable</th></tr></thead><tbody>${itemRows}</tbody></table>`:''}
+  ${payments.length?`<div class="secTitle">Payment Log</div><table><thead><tr><th>Date</th><th>Method</th><th>Note</th><th style="text-align:right">Amount Paid</th></tr></thead><tbody>${txRows}</tbody></table>`:''}
   <div class="summary">
     <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Total Charged:</span><span style="font-weight:600">PKR ${total_charged.toLocaleString()}</span></div>
     ${total_discount>0?`<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Total Discount:</span><span style="font-weight:600;color:#e53e3e">−PKR ${total_discount.toLocaleString()}</span></div>`:''}
     <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Total Paid:</span><span style="font-weight:600;color:#38a169">PKR ${total_paid.toLocaleString()}</span></div>
-    <div style="display:flex;justify-content:space-between;border-top:1px solid #e2e8f0;padding-top:8px;margin-top:4px"><span style="font-weight:700">Balance Due:</span><span style="font-weight:700;color:${balance>0?'#e53e3e':'#38a169'}">PKR ${balance.toLocaleString()}</span></div>
+    <div style="display:flex;justify-content:space-between;border-top:1px solid #e2e8f0;padding-top:8px;margin-top:4px"><span style="font-weight:700;font-size:14px">Amount Payable / Balance Due:</span><span style="font-weight:700;font-size:18px;color:${balance>0?'#e53e3e':'#38a169'}">PKR ${balance.toLocaleString()}</span></div>
   </div>
   ${pdfDoctorSignatureHTML()}
   <div class="footer">Smile Hub Clinics · Johar Town, Lahore · Thank you for choosing us!</div>
@@ -3790,15 +3858,18 @@ function downloadPatientRecord(mr, mode) {
     return i>0?`<tr><td style="padding:7px 12px;border:1px solid #e2e8f0;color:#6b7a8d;font-weight:600;white-space:nowrap">${line.substring(0,i).trim()}</td><td style="padding:7px 12px;border:1px solid #e2e8f0">${line.substring(i+1).trim()}</td></tr>`:'';
   }).join('') : '<tr><td colspan="2" style="padding:10px;text-align:center;color:#6b7a8d">No notes recorded</td></tr>';
 
-  const planHTML = plan.length ? plan.map(item=>{
-    const disc=parseFloat(item.discount)||0;
-    const qty=parseFloat(item.qty)||1;
-    const lineTotal=(parseFloat(item.cost)||0)*qty;
-    return `<tr><td style="padding:7px 12px;border:1px solid #e2e8f0">${item.tooth||'—'}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;font-weight:600">${item.proc}${qty>1?' ×'+qty:''}</td><td style="padding:7px 12px;border:1px solid #e2e8f0">${item.priority}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;text-align:right;color:#e53e3e">${disc>0?'−'+disc.toLocaleString():'—'}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;text-align:right">PKR ${(lineTotal-disc).toLocaleString()}</td></tr>`;}).join('') : '<tr><td colspan="5" style="padding:10px;text-align:center;color:#6b7a8d">No treatment plan</td></tr>';
+  const planGrouped = groupByProc(plan);
+  const planHTML = planGrouped.length ? planGrouped.map(g=>{
+    return `<tr><td style="padding:7px 12px;border:1px solid #e2e8f0;font-weight:600">${g.proc}</td><td style="padding:7px 12px;border:1px solid #e2e8f0">${g.teeth||'—'}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;text-align:center">PKR ${Math.round(g.unitPrice).toLocaleString()}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;text-align:center">${g.qty}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;text-align:right;color:#e53e3e">${g.discount>0?'−'+g.discount.toLocaleString():'—'}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;text-align:right">PKR ${g.payable.toLocaleString()}</td></tr>`;}).join('') : '<tr><td colspan="6" style="padding:10px;text-align:center;color:#6b7a8d">No treatment plan</td></tr>';
 
-  const payHTML = pays.length ? pays.map(pay=>{
-    const disc=parseFloat(pay.discount)||0;
-    return `<tr><td style="padding:7px 12px;border:1px solid #e2e8f0">${pay.date}</td><td style="padding:7px 12px;border:1px solid #e2e8f0">${pay.proc||'General'}</td><td style="padding:7px 12px;border:1px solid #e2e8f0">PKR ${(parseFloat(pay.charged)||0).toLocaleString()}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;color:#e53e3e">${disc>0?'−'+disc.toLocaleString():'—'}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;color:#38a169;font-weight:600">PKR ${(parseFloat(pay.paid)||0).toLocaleString()}</td></tr>`;}).join('') : '<tr><td colspan="5" style="padding:10px;text-align:center;color:#6b7a8d">No payments recorded</td></tr>';
+  const payAllItems = [];
+  pays.forEach(pay => {
+    if (pay.items && pay.items.length) { pay.items.forEach(it => payAllItems.push(it)); }
+    else { payAllItems.push({ proc: pay.proc || 'General', tooth:'', cost: parseFloat(pay.charged)||0, qty:1, discount: parseFloat(pay.discount)||0 }); }
+  });
+  const payGrouped = groupByProc(payAllItems);
+  const payHTML = payGrouped.length ? payGrouped.map(g=>{
+    return `<tr><td style="padding:7px 12px;border:1px solid #e2e8f0;font-weight:600">${g.proc}${g.teeth?` <span style="color:#6b7a8d;font-weight:400">(Tooth ${g.teeth})</span>`:''}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;text-align:center">PKR ${Math.round(g.unitPrice).toLocaleString()}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;text-align:center">${g.qty}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;color:#e53e3e">${g.discount>0?'−'+g.discount.toLocaleString():'—'}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;color:#38a169;font-weight:600">PKR ${g.payable.toLocaleString()}</td></tr>`;}).join('') : '<tr><td colspan="5" style="padding:10px;text-align:center;color:#6b7a8d">No payments recorded</td></tr>';
 
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Patient Record - ${name}</title>
   <style>body{font-family:Arial,sans-serif;max-width:750px;margin:0 auto;padding:30px;color:#1a2332;font-size:13px}
@@ -3837,15 +3908,15 @@ function downloadPatientRecord(mr, mode) {
   <table><thead><tr><th>Date</th><th>Procedure / Notes</th></tr></thead><tbody>${notesHTML}</tbody></table>
 
   <div class="sec">Treatment Plan</div>
-  <table><thead><tr><th>Tooth</th><th>Procedure</th><th>Priority</th><th style="text-align:right">Discount</th><th style="text-align:right">Payable</th></tr></thead><tbody>${planHTML}</tbody></table>
+  <table><thead><tr><th>Procedure</th><th>Tooth</th><th style="text-align:center">Unit Price</th><th style="text-align:center">Qty</th><th style="text-align:right">Discount</th><th style="text-align:right">Payable</th></tr></thead><tbody>${planHTML}</tbody></table>
 
   <div class="sec">Payment History</div>
-  <table><thead><tr><th>Date</th><th>Procedure</th><th>Charged</th><th>Discount</th><th>Paid</th></tr></thead><tbody>${payHTML}</tbody></table>
+  <table><thead><tr><th>Procedure</th><th style="text-align:center">Unit Price</th><th style="text-align:center">Qty</th><th>Discount</th><th>Paid</th></tr></thead><tbody>${payHTML}</tbody></table>
   ${pays.length?`<div class="summary">
     <div style="display:flex;justify-content:space-between;margin-bottom:5px"><span>Total Charged:</span><span style="font-weight:600">PKR ${total_charged.toLocaleString()}</span></div>
     ${total_pay_discount>0?`<div style="display:flex;justify-content:space-between;margin-bottom:5px"><span>Total Discount:</span><span style="font-weight:600;color:#e53e3e">−PKR ${total_pay_discount.toLocaleString()}</span></div>`:''}
     <div style="display:flex;justify-content:space-between;margin-bottom:5px"><span>Total Paid:</span><span style="font-weight:600;color:#38a169">PKR ${total_paid.toLocaleString()}</span></div>
-    <div style="display:flex;justify-content:space-between;border-top:1px solid #e2e8f0;padding-top:8px"><span style="font-weight:700">Balance Due:</span><span style="font-weight:700;color:${balance>0?'#e53e3e':'#38a169'}">PKR ${balance.toLocaleString()}</span></div>
+    <div style="display:flex;justify-content:space-between;border-top:1px solid #e2e8f0;padding-top:8px"><span style="font-weight:700;font-size:14px">Amount Payable / Balance Due:</span><span style="font-weight:700;font-size:18px;color:${balance>0?'#e53e3e':'#38a169'}">PKR ${balance.toLocaleString()}</span></div>
   </div>`:''}
 
   ${pdfSignatureHTML()}
