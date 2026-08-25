@@ -384,19 +384,32 @@ html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;pos
   <!-- SCHEDULE -->
   <div class="scr" id="s-schedule">
     <div class="sec">Appointments</div>
-    <div class="fRow" id="apptF">
-      <div class="chip on" onclick="fAppt('all',this)">All</div>
-      <div class="chip" onclick="fAppt('confirmed',this)">Confirmed</div>
-      <div class="chip" onclick="fAppt('unconfirmed',this)">Unconfirmed</div>
+    <div class="fRow" id="viewToggle">
+      <div class="chip on" onclick="setScheduleView('list',this)">📋 List</div>
+      <div class="chip" onclick="setScheduleView('timetable',this)">🗓 Timetable</div>
     </div>
-    <div class="fRow" id="apptDoc">
-      <div class="chip on" onclick="fApptDoc('all',this)">All Doctors</div>
-      <div class="chip" onclick="fApptDoc('Dr. Abdullah',this)">Dr. Abdullah</div>
-      <div class="chip" onclick="fApptDoc('Dr. Athar',this)">Dr. Athar</div>
-      <div class="chip" onclick="fApptDoc('Dr. Hussain',this)">Dr. Hussain</div>
-      <div class="chip" onclick="fApptDoc('Dr. Asim',this)">Dr. Asim</div>
+    <div id="listView">
+      <div class="fRow" id="apptF">
+        <div class="chip on" onclick="fAppt('all',this)">All</div>
+        <div class="chip" onclick="fAppt('confirmed',this)">Confirmed</div>
+        <div class="chip" onclick="fAppt('unconfirmed',this)">Unconfirmed</div>
+      </div>
+      <div class="fRow" id="apptDoc">
+        <div class="chip on" onclick="fApptDoc('all',this)">All Doctors</div>
+        <div class="chip" onclick="fApptDoc('Dr. Abdullah',this)">Dr. Abdullah</div>
+        <div class="chip" onclick="fApptDoc('Dr. Athar',this)">Dr. Athar</div>
+        <div class="chip" onclick="fApptDoc('Dr. Hussain',this)">Dr. Hussain</div>
+        <div class="chip" onclick="fApptDoc('Dr. Asim',this)">Dr. Asim</div>
+      </div>
+      <div id="apptList"></div>
     </div>
-    <div id="apptList"></div>
+    <div id="timetableView" style="display:none">
+      <input class="fI" type="date" id="ttDate" onchange="renderTimetable()" style="margin-bottom:10px">
+      <div style="font-size:10px;color:var(--muted);margin-bottom:8px">Tap a free slot to start booking it</div>
+      <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+        <div id="ttGrid" style="min-width:520px"></div>
+      </div>
+    </div>
   </div>
 
   <!-- PATIENTS -->
@@ -426,6 +439,18 @@ html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;pos
     <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Tap any procedure to edit price</div>
     <div id="priceList"></div>
     <button class="btnP" onclick="openAddPrice()" style="margin-top:8px">+ Add Procedure</button>
+  </div>
+
+  <!-- INVENTORY -->
+  <div class="scr" id="s-inventory">
+    <div class="sec">Inventory</div>
+    <div id="lowStockBar"></div>
+    <div class="fRow" id="invF">
+      <div class="chip on" onclick="fInv('all',this)">All Items</div>
+      <div class="chip" onclick="fInv('low',this)">⚠ Low Stock</div>
+    </div>
+    <div id="invList"></div>
+    <button class="btnP" onclick="openAddInvModal()" style="margin-top:8px">+ Add Item</button>
   </div>
 
   <!-- BALANCES -->
@@ -494,6 +519,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;pos
 
 <!-- FAB -->
 <button class="fab" id="fab" onclick="go('add')" style="display:none">＋</button>
+<button class="fab" id="botFab" onclick="openBotChat()" style="display:none;bottom:126px;background:linear-gradient(135deg,#4c51bf,#6b46c1);font-size:22px">🤖</button>
 
 <!-- NAV -->
 <nav class="nav" id="nav" style="display:none">
@@ -502,6 +528,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;pos
   <button class="nBtn" id="n-patients" onclick="go('patients')"><span class="nIco">👥</span><span class="nLbl">Patients</span><div class="nDot"></div></button>
   <button class="nBtn" id="n-recalls" onclick="go('recalls')"><span class="nIco">🔔</span><span class="nLbl">Recalls</span><div class="nDot"></div></button>
   <button class="nBtn" id="n-prices" onclick="go('prices')"><span class="nIco">💰</span><span class="nLbl">Prices</span><div class="nDot"></div></button>
+  <button class="nBtn" id="n-inventory" onclick="go('inventory')" style="position:relative"><span class="nIco">📦</span><span class="nLbl">Stock</span><span id="invBadge" style="display:none;position:absolute;top:2px;right:14px;background:var(--red);color:#fff;font-size:9px;font-weight:700;border-radius:10px;min-width:15px;height:15px;line-height:15px;text-align:center;padding:0 3px"></span><div class="nDot"></div></button>
 </nav>
 
 <!-- SEARCH MODAL -->
@@ -601,6 +628,39 @@ html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;pos
   </div>
 </div>
 
+<!-- EDIT INVENTORY ITEM MODAL -->
+<div class="ov" id="invModal">
+  <div class="sh">
+    <div class="handle"></div>
+    <div class="shT">Edit Item</div>
+    <div class="fG"><label class="fL">Item Name</label><input class="fI" id="invName" placeholder="e.g. Composite Resin"></div>
+    <div class="fR">
+      <div class="fG"><label class="fL">Quantity</label><input class="fI" type="number" id="invQty" placeholder="0"></div>
+      <div class="fG"><label class="fL">Unit</label><input class="fI" id="invUnit" placeholder="e.g. boxes, pcs"></div>
+    </div>
+    <div class="fG"><label class="fL">Low Stock Alert Below</label><input class="fI" type="number" id="invThreshold" placeholder="e.g. 5"></div>
+    <button class="btnP" onclick="saveInvItem()">💾 Save Changes</button>
+    <button class="btnD" onclick="deleteInvItem()">🗑 Delete Item</button>
+    <button class="btnS" onclick="closeInvModal()">Cancel</button>
+  </div>
+</div>
+
+<!-- ADD INVENTORY ITEM MODAL -->
+<div class="ov" id="addInvModal">
+  <div class="sh">
+    <div class="handle"></div>
+    <div class="shT">Add Inventory Item</div>
+    <div class="fG"><label class="fL">Item Name</label><input class="fI" id="newInvName" placeholder="e.g. Composite Resin"></div>
+    <div class="fR">
+      <div class="fG"><label class="fL">Starting Quantity</label><input class="fI" type="number" id="newInvQty" placeholder="0"></div>
+      <div class="fG"><label class="fL">Unit</label><input class="fI" id="newInvUnit" placeholder="e.g. boxes, pcs"></div>
+    </div>
+    <div class="fG"><label class="fL">Low Stock Alert Below</label><input class="fI" type="number" id="newInvThreshold" placeholder="e.g. 5"></div>
+    <button class="btnP" onclick="saveNewInvItem()">💾 Add Item</button>
+    <button class="btnS" onclick="closeAddInvModal()">Cancel</button>
+  </div>
+</div>
+
 <!-- PAYMENT MODAL -->
 <div class="ov" id="payModal">
   <div class="sh">
@@ -684,6 +744,24 @@ html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;pos
     <div id="labBillingContent"></div>
     <button class="btnP" onclick="downloadLabBillingReport()" style="background:linear-gradient(135deg,var(--teal-d),var(--teal))">📄 Download Report</button>
     <button class="btnS" onclick="closeLabBilling()">Close</button>
+  </div>
+</div>
+
+<!-- ASSISTANT CHAT MODAL -->
+<div class="ov" id="botModal">
+  <div class="sh" style="display:flex;flex-direction:column;max-height:85vh;padding-bottom:10px">
+    <div class="handle"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div class="shT" style="margin:0">🤖 Smile Hub Assistant</div>
+      <button onclick="closeBotChat()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted)">✕</button>
+    </div>
+    <div id="botLog" style="flex:1;overflow-y:auto;min-height:220px;max-height:50vh;padding:4px 2px;display:flex;flex-direction:column;gap:8px"></div>
+    <div id="botVoiceNote" style="font-size:10px;color:var(--muted);text-align:center;margin:4px 0"></div>
+    <div style="display:flex;gap:8px;margin-top:6px">
+      <input class="fI" id="botInput" placeholder="Type or tap 🎤 to speak…" style="flex:1" onkeydown="if(event.key==='Enter')sendBotText()">
+      <button type="button" onclick="toggleBotVoice()" id="botMicBtn" style="width:44px;flex-shrink:0;border-radius:10px;border:1.5px solid var(--teal);background:rgba(75,191,176,.08);color:var(--teal-d);font-size:18px;cursor:pointer">🎤</button>
+      <button type="button" onclick="sendBotText()" style="width:44px;flex-shrink:0;border-radius:10px;border:none;background:linear-gradient(135deg,var(--navy),var(--navy-l));color:#fff;font-size:16px;cursor:pointer">➤</button>
+    </div>
   </div>
 </div>
 
@@ -888,6 +966,9 @@ let PATIENTS = [];
 let EVENTS = [];
 let ALL_EVENTS = []; // all upcoming events
 let PRICES = [];
+let INVENTORY = [];
+let curInvIdx = null;
+let invFilter = 'all';
 let TREATMENT_PLANS = {};
 let PAYMENTS = {}; // payments per patient
 let LAB_WORK = {}; // lab work per patient
@@ -951,6 +1032,8 @@ async function showApp() {
     if(el) el.style.display = id==='nav'?'flex':'block';
   });
   document.getElementById('fab').style.display = 'flex';
+  const botFabEl = document.getElementById('botFab');
+  if (botFabEl) botFabEl.style.display = 'flex';
 
   // Fetch user email and set as active calendar BEFORE initApp
   try {
@@ -1015,6 +1098,11 @@ async function initApp() {
   const savedPrices = localStorage.getItem('smilehub_prices');
   PRICES = savedPrices ? JSON.parse(savedPrices) : [...DEFAULT_PRICES];
 
+  // Inventory: localStorage is just an instant offline fallback — the
+  // sheet (via the CLINIC_SETTINGS row below) is the shared source of truth.
+  const savedInv = localStorage.getItem('smilehub_inventory');
+  INVENTORY = savedInv ? JSON.parse(savedInv) : [];
+
   // Treatment plans / payments / lab work: use localStorage as an instant
   // offline fallback while we wait on the sheet fetch below, which is the
   // shared source of truth across devices.
@@ -1049,10 +1137,10 @@ async function initApp() {
     localStorage.setItem('smilehub_payments', JSON.stringify(PAYMENTS));
     localStorage.setItem('smilehub_lab', JSON.stringify(LAB_WORK));
 
-    // Price list is clinic-wide, not per-patient, so it lives on a special
-    // non-patient settings row (MR Number = CLINIC_SETTINGS) rather than a
-    // real patient's row. Pull it out, then remove that row from PATIENTS
-    // so it never shows up in the directory, search, or recall lists.
+    // Price list / Inventory are clinic-wide, not per-patient, so they live
+    // on a special non-patient settings row (MR Number = CLINIC_SETTINGS)
+    // rather than a real patient's row. Pull them out, then remove that row
+    // from PATIENTS so it never shows up in the directory, search, or recalls.
     const settingsRow = PATIENTS.find(p => getMR(p) === 'CLINIC_SETTINGS');
     if (settingsRow) {
       const priceJson = f(settingsRow, 'Price List JSON');
@@ -1061,6 +1149,13 @@ async function initApp() {
           PRICES = JSON.parse(priceJson);
           localStorage.setItem('smilehub_prices', JSON.stringify(PRICES));
         } catch(e) { console.error('Price list parse error:', e); }
+      }
+      const invJson = f(settingsRow, 'Inventory JSON');
+      if (invJson) {
+        try {
+          INVENTORY = JSON.parse(invJson);
+          localStorage.setItem('smilehub_inventory', JSON.stringify(INVENTORY));
+        } catch(e) { console.error('Inventory parse error:', e); }
       }
       PATIENTS = PATIENTS.filter(p => getMR(p) !== 'CLINIC_SETTINGS');
     }
@@ -1076,7 +1171,7 @@ async function initApp() {
     document.getElementById('stR').textContent = countOvr();
     document.getElementById('syncBar').innerHTML = `<div class="syncBar">✅ Synced · ${PATIENTS.length} patients · ${EVENTS.length} today</div>`;
 
-    renderToday(); renderPats(); renderAppts(); renderRc(); renderPrices(); renderBalances(); updateRevenueStats();
+    renderToday(); renderPats(); renderAppts(); renderRc(); renderPrices(); renderBalances(); updateRevenueStats(); renderInventory();
   } catch(e) {
     console.error('Init error:', e);
     document.getElementById('syncBar').innerHTML = `<div class="syncBar" style="color:var(--red)">⚠ Sync error — ${e.message || 'Check connection'} · <span style="cursor:pointer;text-decoration:underline" onclick="initApp()">Retry</span></div>`;
@@ -1884,6 +1979,131 @@ function saveNewPrice() {
 function closeAddPrice(){document.getElementById('addPriceModal').classList.remove('open');}
 
 // ═══════════════════════════════════════
+// INVENTORY
+// ═══════════════════════════════════════
+function isLowStock(item) {
+  const threshold = parseFloat(item.threshold);
+  return !isNaN(threshold) && parseFloat(item.qty) <= threshold;
+}
+
+function countLowStock() {
+  return INVENTORY.filter(isLowStock).length;
+}
+
+function updateInvBadge() {
+  const badge = document.getElementById('invBadge');
+  if (!badge) return;
+  const n = countLowStock();
+  if (n > 0) { badge.textContent = n; badge.style.display = 'block'; }
+  else { badge.style.display = 'none'; }
+}
+
+function fInv(filter, el) {
+  invFilter = filter;
+  document.querySelectorAll('#invF .chip').forEach(c=>c.classList.remove('on'));
+  el.classList.add('on');
+  renderInventory();
+}
+
+function renderInventory() {
+  updateInvBadge();
+  const bar = document.getElementById('lowStockBar');
+  if (bar) {
+    const n = countLowStock();
+    bar.innerHTML = n > 0
+      ? `<div class="syncBar" style="background:rgba(229,62,62,.08);border-color:rgba(229,62,62,.25);color:var(--red)">⚠ ${n} item${n>1?'s':''} low on stock</div>`
+      : '';
+  }
+  const el = document.getElementById('invList');
+  if (!el) return;
+  let items = INVENTORY.map((it,i)=>({...it, _idx:i}));
+  if (invFilter === 'low') items = items.filter(isLowStock);
+  if (!items.length) {
+    el.innerHTML = '<div class="empty"><div class="emIco">📦</div><div class="emTxt">'+(invFilter==='low'?'No low-stock items':'No inventory items yet')+'</div></div>';
+    return;
+  }
+  el.innerHTML = items.map(it => {
+    const low = isLowStock(it);
+    return `<div class="priceC" style="${low?'border-color:rgba(229,62,62,.3);background:rgba(229,62,62,.04)':''}">
+      <div style="flex:1;cursor:pointer" onclick="openInvModal(${it._idx})">
+        <div class="priceName">${it.name}${low?' <span style="color:var(--red);font-size:10px;font-weight:700">⚠ LOW</span>':''}</div>
+        <div class="priceCode">${it.threshold!==''&&it.threshold!=null?'Alert below '+it.threshold:'No alert threshold set'}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <button onclick="event.stopPropagation();adjustInvQty(${it._idx},-1)" style="width:26px;height:26px;border-radius:7px;border:1.5px solid var(--border);background:#fff;font-size:14px;font-weight:700;color:var(--navy);cursor:pointer">−</button>
+        <div style="min-width:44px;text-align:center"><div class="priceAmt" style="${low?'color:var(--red)':''}">${it.qty}</div><div style="font-size:9px;color:var(--muted)">${it.unit||'pcs'}</div></div>
+        <button onclick="event.stopPropagation();adjustInvQty(${it._idx},1)" style="width:26px;height:26px;border-radius:7px;border:1.5px solid var(--border);background:#fff;font-size:14px;font-weight:700;color:var(--navy);cursor:pointer">+</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function adjustInvQty(idx, delta) {
+  const item = INVENTORY[idx];
+  if (!item) return;
+  item.qty = Math.max(0, (parseFloat(item.qty)||0) + delta);
+  localStorage.setItem('smilehub_inventory', JSON.stringify(INVENTORY));
+  syncSheetField('CLINIC_SETTINGS', 'Inventory JSON', JSON.stringify(INVENTORY));
+  renderInventory();
+}
+
+function openInvModal(idx) {
+  curInvIdx = idx;
+  const item = INVENTORY[idx];
+  document.getElementById('invName').value = item.name;
+  document.getElementById('invQty').value = item.qty;
+  document.getElementById('invUnit').value = item.unit || '';
+  document.getElementById('invThreshold').value = item.threshold!==''&&item.threshold!=null ? item.threshold : '';
+  document.getElementById('invModal').classList.add('open');
+  setTimeout(()=>document.getElementById('invName').focus(),200);
+}
+
+function saveInvItem() {
+  const name = document.getElementById('invName').value.trim();
+  const qty = parseFloat(document.getElementById('invQty').value) || 0;
+  const unit = document.getElementById('invUnit').value.trim();
+  const thresholdRaw = document.getElementById('invThreshold').value.trim();
+  const threshold = thresholdRaw === '' ? '' : parseFloat(thresholdRaw);
+  if (!name) { alert('Item name cannot be empty'); return; }
+  INVENTORY[curInvIdx] = { ...INVENTORY[curInvIdx], name, qty, unit, threshold };
+  localStorage.setItem('smilehub_inventory', JSON.stringify(INVENTORY));
+  syncSheetField('CLINIC_SETTINGS', 'Inventory JSON', JSON.stringify(INVENTORY));
+  closeInvModal(); renderInventory();
+}
+
+function deleteInvItem() {
+  if (curInvIdx === null) return;
+  if (!confirm('Remove this item from inventory?')) return;
+  INVENTORY.splice(curInvIdx, 1);
+  localStorage.setItem('smilehub_inventory', JSON.stringify(INVENTORY));
+  syncSheetField('CLINIC_SETTINGS', 'Inventory JSON', JSON.stringify(INVENTORY));
+  closeInvModal(); renderInventory();
+}
+
+function closeInvModal(){document.getElementById('invModal').classList.remove('open'); curInvIdx=null;}
+
+function openAddInvModal(){
+  document.getElementById('newInvName').value='';
+  document.getElementById('newInvQty').value='';
+  document.getElementById('newInvUnit').value='';
+  document.getElementById('newInvThreshold').value='';
+  document.getElementById('addInvModal').classList.add('open');
+}
+function saveNewInvItem() {
+  const name = document.getElementById('newInvName').value.trim();
+  const qty = parseFloat(document.getElementById('newInvQty').value) || 0;
+  const unit = document.getElementById('newInvUnit').value.trim();
+  const thresholdRaw = document.getElementById('newInvThreshold').value.trim();
+  const threshold = thresholdRaw === '' ? '' : parseFloat(thresholdRaw);
+  if (!name) { alert('Enter item name'); return; }
+  INVENTORY.push({ name, qty, unit, threshold });
+  localStorage.setItem('smilehub_inventory', JSON.stringify(INVENTORY));
+  syncSheetField('CLINIC_SETTINGS', 'Inventory JSON', JSON.stringify(INVENTORY));
+  closeAddInvModal(); renderInventory();
+}
+function closeAddInvModal(){document.getElementById('addInvModal').classList.remove('open');}
+
+// ═══════════════════════════════════════
 // RECALLS
 // ═══════════════════════════════════════
 function parseRc(visit,next) {
@@ -2335,6 +2555,355 @@ function parseVoiceEntry(transcript) {
   }
 }
 
+// ═══════════════════════════════════════
+// CONVERSATIONAL ASSISTANT (pattern-based — books, logs payments,
+// updates inventory, and answers quick questions via typed or spoken
+// commands. Every write action shows a confirm card before saving.)
+// ═══════════════════════════════════════
+let BOT_MESSAGES = [];
+let botRecognition = null;
+let botListening = false;
+let botPendingAction = null;
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function openBotChat() {
+  document.getElementById('botModal').classList.add('open');
+  if (!BOT_MESSAGES.length) {
+    addBotMessage('bot', 'Hi! I can help you book appointments, log payments, update inventory, or answer quick questions.\n\nTry:\n- book Ahmed 7pm tomorrow with Dr. Abdullah\n- Ahmed paid 3000 for scaling\n- used 2 gloves\n- how many patients today\n- low stock\n- balance for Ahmed');
+  }
+  setTimeout(function(){ document.getElementById('botInput').focus(); }, 200);
+}
+function closeBotChat() {
+  document.getElementById('botModal').classList.remove('open');
+  if (botListening && botRecognition) { try { botRecognition.stop(); } catch(e){} }
+}
+
+function addBotMessage(role, text, cardHTML) {
+  BOT_MESSAGES.push({role:role, text:text, cardHTML:cardHTML||''});
+  renderBotLog();
+}
+function renderBotLog() {
+  const log = document.getElementById('botLog');
+  if (!log) return;
+  log.innerHTML = BOT_MESSAGES.map(function(m) {
+    const isUser = m.role === 'user';
+    const bubble = '<div style="max-width:82%;background:'+(isUser?'linear-gradient(135deg,var(--navy),var(--navy-l))':'var(--bg)')+';color:'+(isUser?'#fff':'var(--text)')+';border-radius:14px;'+(isUser?'border-bottom-right-radius:4px':'border-bottom-left-radius:4px')+';padding:9px 12px;font-size:13px;line-height:1.4;white-space:pre-wrap">'+escapeHtml(m.text)+'</div>';
+    return '<div style="display:flex;flex-direction:column;align-items:'+(isUser?'flex-end':'flex-start')+'">'+bubble+m.cardHTML+'</div>';
+  }).join('');
+  log.scrollTop = log.scrollHeight;
+}
+
+function sendBotText() {
+  const input = document.getElementById('botInput');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  addBotMessage('user', text);
+  handleBotMessage(text);
+}
+
+function toggleBotVoice() {
+  const note = document.getElementById('botVoiceNote');
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    note.innerHTML = '<span style="color:var(--orange)">Voice needs Android Chrome — type instead.</span>';
+    return;
+  }
+  if (botListening) {
+    if (botRecognition) botRecognition.stop();
+    return;
+  }
+  botRecognition = new SR();
+  botRecognition.lang = 'en-US';
+  botRecognition.continuous = false;
+  botRecognition.interimResults = false;
+
+  const micBtn = document.getElementById('botMicBtn');
+
+  botRecognition.onstart = function() {
+    botListening = true;
+    micBtn.textContent = '🔴';
+    micBtn.style.borderColor = 'var(--red)';
+    micBtn.style.background = 'rgba(229,62,62,.08)';
+    micBtn.style.color = 'var(--red)';
+    note.textContent = 'Listening…';
+  };
+  botRecognition.onresult = function(e) {
+    const transcript = e.results[0][0].transcript;
+    addBotMessage('user', transcript);
+    handleBotMessage(transcript);
+  };
+  botRecognition.onerror = function(e) {
+    if (e.error === 'no-speech') note.innerHTML = '<span style="color:var(--orange)">Did not catch that.</span>';
+    else if (e.error === 'not-allowed') note.innerHTML = '<span style="color:var(--red)">Microphone permission denied.</span>';
+    else note.innerHTML = '<span style="color:var(--red)">' + e.error + '</span>';
+  };
+  botRecognition.onend = function() {
+    botListening = false;
+    micBtn.textContent = '🎤';
+    micBtn.style.borderColor = 'var(--teal)';
+    micBtn.style.background = 'rgba(75,191,176,.08)';
+    micBtn.style.color = 'var(--teal-d)';
+  };
+  try { botRecognition.start(); } catch(err) { note.innerHTML = '<span style="color:var(--red)">' + err.message + '</span>'; }
+}
+
+// ── Date / time parsing (client-side port of the WhatsApp bot logic) ──
+function botParseDate(s) {
+  s = (s||'').toLowerCase().trim();
+  const now = new Date();
+  if (!s || s.indexOf('today') > -1) return now.toISOString().split('T')[0];
+  if (s.indexOf('tomorrow') > -1) {
+    const t = new Date(now.getTime() + 86400000);
+    return t.toISOString().split('T')[0];
+  }
+  const m = s.match(/(\d{1,2})[-\/](\d{1,2})/);
+  if (m) {
+    const yr = now.getFullYear();
+    return yr + '-' + String(m[2]).padStart(2,'0') + '-' + String(m[1]).padStart(2,'0');
+  }
+  return null;
+}
+function botParseTime(s) {
+  s = (s||'').toLowerCase();
+  let m = s.match(/(\d{1,2}):(\d{2})\s*(am|pm)?/);
+  if (m) {
+    let h = parseInt(m[1]), mn = parseInt(m[2]);
+    if (m[3]==='pm' && h<12) h+=12;
+    if (m[3]==='am' && h===12) h=0;
+    return String(h).padStart(2,'0')+':'+String(mn).padStart(2,'0');
+  }
+  m = s.match(/(\d{1,2})\s*(am|pm)/);
+  if (m) {
+    let h = parseInt(m[1]);
+    if (m[2]==='pm' && h<12) h+=12;
+    if (m[2]==='am' && h===12) h=0;
+    return String(h).padStart(2,'0')+':00';
+  }
+  return null;
+}
+
+// ── Intent router ──
+function handleBotMessage(text) {
+  const lc = text.toLowerCase().trim();
+
+  if (/how many.*(patient|appointment).*today|today.*(patient|appointment)/.test(lc)) {
+    addBotMessage('bot', 'Today: ' + EVENTS.length + ' appointment' + (EVENTS.length===1?'':'s') + ' across the clinic.');
+    return;
+  }
+  if (/low stock|stock low/.test(lc)) {
+    const low = INVENTORY.filter(isLowStock);
+    addBotMessage('bot', low.length ? 'Low stock:\n' + low.map(function(i){return '- '+i.name+' — '+i.qty+' '+(i.unit||'pcs');}).join('\n') : 'Nothing is low on stock right now.');
+    return;
+  }
+  if (lc.indexOf('balance') > -1) {
+    let nameGuess = lc.replace(/balance|for|what|is|show|check|the/g,'').trim().replace(/\s+/g,' ');
+    const p = findPat(nameGuess);
+    if (!p) { addBotMessage('bot', 'Could not find a patient matching "' + text + '".'); return; }
+    const mr = getMR(p);
+    const pays = PAYMENTS[mr]||[];
+    const charged = pays.reduce(function(s,x){return s+(parseFloat(x.charged)||0);},0);
+    const paid = pays.reduce(function(s,x){return s+(parseFloat(x.paid)||0);},0);
+    addBotMessage('bot', f(p,'Patient Name') + ' — Balance: PKR ' + (charged-paid).toLocaleString());
+    return;
+  }
+  if (lc.indexOf('slots') > -1) {
+    let doctor = 'Dr. Abdullah';
+    for (let i=0;i<TIMETABLE_DOCTORS.length;i++) {
+      if (lc.indexOf(TIMETABLE_DOCTORS[i].toLowerCase().replace('dr. ','')) > -1) { doctor = TIMETABLE_DOCTORS[i]; break; }
+    }
+    const dateStr = botParseDate(lc) || new Date().toISOString().split('T')[0];
+    botAnswerSlots(doctor, dateStr);
+    return;
+  }
+
+  if (/^book\b|appointment/.test(lc)) { handleBotBooking(text); return; }
+  if (/paid|payment|received.*\d/.test(lc)) { handleBotPayment(text); return; }
+  if (/^used\b|restock|add.*stock|received stock/.test(lc)) { handleBotInventory(text); return; }
+
+  addBotMessage('bot', 'I did not understand that. Try:\n- book Ahmed 7pm tomorrow\n- Ahmed paid 3000\n- used 2 gloves\n- how many patients today\n- low stock\n- balance for Ahmed');
+}
+
+function botConfirmCardHTML(title, rows) {
+  const rowsHTML = rows.map(function(r){
+    return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0"><span style="color:var(--muted)">'+r[0]+'</span><span style="font-weight:600">'+escapeHtml(String(r[1]))+'</span></div>';
+  }).join('');
+  return '<div style="background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:10px 12px;margin-top:6px;width:100%">' +
+    '<div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:6px">'+title+'</div>' +
+    rowsHTML +
+    '<div style="display:flex;gap:6px;margin-top:8px">' +
+    '<button onclick="botConfirmYes()" style="flex:1;padding:7px;border-radius:8px;border:none;background:linear-gradient(135deg,var(--teal-d),var(--teal));color:#fff;font-size:12px;font-weight:700;cursor:pointer">Confirm</button>' +
+    '<button onclick="botConfirmNo()" style="flex:1;padding:7px;border-radius:8px;border:1.5px solid var(--border);background:#fff;color:var(--muted);font-size:12px;font-weight:700;cursor:pointer">Cancel</button>' +
+    '</div></div>';
+}
+function botConfirmNo() {
+  botPendingAction = null;
+  addBotMessage('bot', 'Cancelled — nothing was saved.');
+}
+async function botConfirmYes() {
+  if (!botPendingAction) return;
+  const action = botPendingAction;
+  botPendingAction = null;
+
+  if (action.type === 'book') {
+    const start = new Date(action.dateStr + 'T' + action.timeHHMM + ':00');
+    const end = new Date(start.getTime() + 45*60000);
+    const title = '[' + action.doctor + '] ' + action.name + ' - Appointment';
+    const ok = await addCalEvent(title, start.toISOString(), end.toISOString(), 'Booked via Assistant', action.doctor);
+    if (ok && !action.existing) {
+      const mrNums = PATIENTS.map(function(p){return parseInt((getMR(p)||'SH-0000').replace('SH-',''))||0;});
+      const nextMR = 'SH-' + String(Math.max(0,...mrNums)+1).padStart(4,'0');
+      const row = [action.dateStr, action.name, nextMR, '', '', '', '', action.doctor, '', '', '', '', '', '', 'Active', ''];
+      await writeSheet({action:'append', row: JSON.stringify(row)});
+    }
+    addBotMessage('bot', ok ? 'Booked ' + action.name + ' with ' + action.doctor + '.' : 'Could not book — please try from the booking form.');
+    if (ok) await initApp();
+  }
+  else if (action.type === 'payment') {
+    const mr = getMR(action.patient);
+    if (!PAYMENTS[mr]) PAYMENTS[mr] = [];
+    PAYMENTS[mr].push({ proc: action.proc||'General', charged: action.amount, paid: action.amount, method:'Cash', note:'Logged via Assistant', date: new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) });
+    localStorage.setItem('smilehub_payments', JSON.stringify(PAYMENTS));
+    syncSheetField(mr, 'Payments JSON', JSON.stringify(PAYMENTS[mr]));
+    updateRevenueStats();
+    addBotMessage('bot', 'Logged PKR ' + action.amount.toLocaleString() + ' payment for ' + f(action.patient,'Patient Name') + '.');
+  }
+  else if (action.type === 'inventory') {
+    if (action.existingIdx !== null) {
+      const item = INVENTORY[action.existingIdx];
+      item.qty = Math.max(0, (parseFloat(item.qty)||0) + action.delta);
+    } else {
+      INVENTORY.push({ name: action.itemName, qty: Math.max(0,action.delta), unit:'', threshold:'' });
+    }
+    localStorage.setItem('smilehub_inventory', JSON.stringify(INVENTORY));
+    syncSheetField('CLINIC_SETTINGS', 'Inventory JSON', JSON.stringify(INVENTORY));
+    renderInventory();
+    addBotMessage('bot', 'Updated ' + action.itemName + '.');
+  }
+}
+
+function handleBotBooking(text) {
+  const lc = text.toLowerCase().replace(/^book\b/,'').trim();
+  let doctor = 'Dr. Abdullah';
+  for (let i=0;i<TIMETABLE_DOCTORS.length;i++) {
+    if (lc.indexOf(TIMETABLE_DOCTORS[i].toLowerCase().replace('dr. ','')) > -1) { doctor = TIMETABLE_DOCTORS[i]; break; }
+  }
+  const timeHHMM = botParseTime(lc);
+  if (!timeHHMM) { addBotMessage('bot', 'What time? Try: book Ahmed 7pm tomorrow.'); return; }
+  const dateStr = botParseDate(lc) || new Date().toISOString().split('T')[0];
+
+  let nameGuess = text.replace(/^book\b/i,'')
+    .replace(/dr\.?\s*(abdullah|athar|hussain|asim)/i,'')
+    .replace(/\d{1,2}:\d{2}\s*(am|pm)?/i,'')
+    .replace(/\d{1,2}\s*(am|pm)/i,'')
+    .replace(/today|tomorrow/i,'')
+    .replace(/\d{1,2}[-\/]\d{1,2}/,'')
+    .replace(/\bwith\b|\bfor\b|\bat\b/gi,'')
+    .trim().replace(/\s+/g,' ');
+  if (!nameGuess) { addBotMessage('bot', 'Who is this for? Try: book Ahmed 7pm tomorrow.'); return; }
+  nameGuess = nameGuess.replace(/\b\w/g, function(c){return c.toUpperCase();});
+
+  const existing = findPat(nameGuess);
+  const h = parseInt(timeHHMM.split(':')[0]), mn = parseInt(timeHHMM.split(':')[1]);
+  const h12 = h%12||12, ap = h>=12?'PM':'AM';
+  const timeLabel = h12+':'+String(mn).padStart(2,'0')+' '+ap;
+  const dateLabel = new Date(dateStr+'T12:00:00').toLocaleDateString('en-GB',{weekday:'long',day:'2-digit',month:'short'});
+
+  botPendingAction = { type:'book', name:nameGuess, doctor:doctor, dateStr:dateStr, timeHHMM:timeHHMM, existing: !!existing };
+  const cardHTML = botConfirmCardHTML('Book Appointment', [
+    ['Patient', nameGuess + (existing?' (returning)':' (new)')],
+    ['Doctor', doctor],
+    ['Date', dateLabel],
+    ['Time', timeLabel]
+  ]);
+  addBotMessage('bot', 'Here is what I got — confirm to book:', cardHTML);
+}
+
+function handleBotPayment(text) {
+  const amtMatch = text.match(/(\d[\d,]*)/);
+  if (!amtMatch) { addBotMessage('bot', 'How much? Try: Ahmed paid 3000.'); return; }
+  const amount = parseFloat(amtMatch[1].replace(/,/g,''));
+
+  let nameGuess = text.replace(/paid|payment|received|rs\.?|pkr/gi,'').replace(/\d[\d,]*/,'').replace(/\bfor\b.*/i,'').trim().replace(/\s+/g,' ');
+  const procMatch = text.match(/for\s+([a-zA-Z ]+)$/i);
+  const proc = procMatch ? procMatch[1].trim() : '';
+
+  const patient = findPat(nameGuess);
+  if (!patient) { addBotMessage('bot', 'Could not find a patient matching "' + nameGuess + '". Try their full name.'); return; }
+
+  botPendingAction = { type:'payment', patient:patient, amount:amount, proc:proc };
+  const cardHTML = botConfirmCardHTML('Log Payment', [
+    ['Patient', f(patient,'Patient Name')],
+    ['Amount', 'PKR ' + amount.toLocaleString()],
+    ['For', proc || 'General']
+  ]);
+  addBotMessage('bot', 'Confirm this payment:', cardHTML);
+}
+
+function handleBotInventory(text) {
+  const lc = text.toLowerCase();
+  const numMatch = text.match(/(\d+)/);
+  const qty = numMatch ? parseInt(numMatch[1]) : 1;
+  const isUsed = /^used\b/.test(lc.trim());
+  const delta = isUsed ? -qty : qty;
+
+  let itemGuess = text.replace(/^used\b|restock|add|received stock/i,'').replace(/\d+/,'').replace(/\bof\b/i,'').trim();
+  if (!itemGuess) { addBotMessage('bot', 'Which item? Try: used 2 gloves.'); return; }
+
+  let existingIdx = -1;
+  for (let i=0;i<INVENTORY.length;i++) {
+    if (INVENTORY[i].name.toLowerCase().indexOf(itemGuess.toLowerCase())>-1 || itemGuess.toLowerCase().indexOf(INVENTORY[i].name.toLowerCase())>-1) { existingIdx = i; break; }
+  }
+  const itemName = existingIdx > -1 ? INVENTORY[existingIdx].name : (itemGuess.charAt(0).toUpperCase()+itemGuess.slice(1));
+  const newTotal = existingIdx>-1 ? Math.max(0,(parseFloat(INVENTORY[existingIdx].qty)||0)+delta) : Math.max(0,delta);
+
+  botPendingAction = { type:'inventory', itemName:itemName, delta:delta, existingIdx: existingIdx > -1 ? existingIdx : null };
+  const cardHTML = botConfirmCardHTML('Update Inventory', [
+    ['Item', itemName],
+    ['Change', (delta>0?'+':'') + delta],
+    ['New total', newTotal]
+  ]);
+  addBotMessage('bot', 'Confirm this stock update:', cardHTML);
+}
+
+async function botAnswerSlots(doctor, dateStr) {
+  const calId = calIdForDoctor(doctor);
+  const periods = clinicHoursForDoctor(doctor);
+  try {
+    const s = new Date(dateStr + 'T00:00:00');
+    const e = new Date(dateStr + 'T23:59:59');
+    const r = await fetch('https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(calId)+'/events?timeMin='+s.toISOString()+'&timeMax='+e.toISOString()+'&orderBy=startTime&singleEvents=true', {headers:{Authorization:'Bearer '+token}});
+    const d = await r.json();
+    const dayEvents = d.items || [];
+    const booked = [];
+    dayEvents.forEach(function(ev) {
+      if (ev.start && ev.start.dateTime) {
+        const st = new Date(ev.start.dateTime), en = new Date(ev.end.dateTime);
+        booked.push({start: st.getHours()*60+st.getMinutes(), end: en.getHours()*60+en.getMinutes()});
+      }
+    });
+    const dur = 45;
+    const free = [];
+    periods.forEach(function(period) {
+      for (let m = period.start; m+dur <= period.end; m += 30) {
+        const clash = booked.some(function(b){ return m < b.end && (m+dur) > b.start; });
+        if (!clash) {
+          const h = Math.floor(m/60), mn = m%60, h12 = h%12||12, ap = h>=12?'PM':'AM';
+          free.push(h12+':'+String(mn).padStart(2,'0')+' '+ap);
+        }
+      }
+    });
+    addBotMessage('bot', free.length ? doctor + ' free slots:\n' + free.map(function(s){return '- '+s;}).join('\n') : 'No free slots for ' + doctor + ' on that date.');
+  } catch(err) {
+    addBotMessage('bot', 'Could not check the calendar right now.');
+  }
+}
+
 function checkExisting(name) {
   const p=findPat(name);
   const nf=document.getElementById('newPF'), ep=document.getElementById('existPat'), ei=document.getElementById('existInfo');
@@ -2424,6 +2993,8 @@ function go(screen) {
   const nb=document.getElementById('n-'+screen);
   if(nb) nb.classList.add('on');
   document.getElementById('fab').style.display=screen==='add'?'none':'flex';
+  const botFabEl2=document.getElementById('botFab');
+  if(botFabEl2) botFabEl2.style.display=screen==='add'?'none':'flex';
   document.getElementById('cnt').scrollTop=0;
   // Reset add form when opening
   if(screen==='add') resetAddForm();
@@ -2890,6 +3461,118 @@ function fApptDoc(doc, el) {
   renderAllAppts();
 }
 
+// ═══════════════════════════════════════
+// DOCTOR TIMETABLE VIEW
+// ═══════════════════════════════════════
+const TIMETABLE_DOCTORS = ['Dr. Abdullah', 'Dr. Athar', 'Dr. Hussain'];
+
+function parseDoctorFromTitle(summary) {
+  const m = (summary||'').match(/^\[(.*?)\]/);
+  return m ? m[1] : 'Dr. Abdullah';
+}
+
+function setScheduleView(view, el) {
+  document.querySelectorAll('#viewToggle .chip').forEach(c=>c.classList.remove('on'));
+  el.classList.add('on');
+  document.getElementById('listView').style.display = view==='list' ? 'block' : 'none';
+  document.getElementById('timetableView').style.display = view==='timetable' ? 'block' : 'none';
+  if (view === 'timetable') {
+    const dateEl = document.getElementById('ttDate');
+    if (!dateEl.value) dateEl.value = new Date().toISOString().split('T')[0];
+    renderTimetable();
+  }
+}
+
+function renderTimetable() {
+  const dateStr = document.getElementById('ttDate').value;
+  const grid = document.getElementById('ttGrid');
+  if (!dateStr || !grid) return;
+
+  // Build a lookup: doctor -> [{timeHHMM, patient, evId, calId}]
+  const dayEvents = ALL_EVENTS.filter(ev => {
+    const sISO = ev.start?.dateTime || ev.start?.date;
+    if (!sISO) return false;
+    return sISO.split('T')[0] === dateStr;
+  });
+
+  const byDoc = {};
+  TIMETABLE_DOCTORS.forEach(d => byDoc[d] = {});
+  dayEvents.forEach(ev => {
+    const doc = parseDoctorFromTitle(ev.summary);
+    if (!byDoc[doc]) return; // skip doctors not shown as a column (e.g. Dr. Asim)
+    const sISO = ev.start?.dateTime;
+    if (!sISO) return;
+    const d = new Date(sISO);
+    const hhmm = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+    const durMin = ev.end?.dateTime ? Math.round((new Date(ev.end.dateTime) - d) / 60000) : 45;
+    const pName = (ev.summary||'').split(' - ')[0].replace(/\[.*?\]/g,'').replace(/\?\?/g,'').trim();
+    // mark every 30-min slot this appointment overlaps as occupied
+    const startMin = d.getHours()*60 + d.getMinutes();
+    for (let m = startMin; m < startMin + durMin; m += 30) {
+      const slotH = Math.floor(m/60), slotM = m - slotH*60 >= 30 ? 30 : 0;
+      const key = String(slotH).padStart(2,'0') + ':' + String(slotM).padStart(2,'0');
+      byDoc[doc][key] = { patient: pName, first: (m === startMin) };
+    }
+  });
+
+  // Build the row list: Morning 10:00-14:00, Evening 18:00-21:00, 30-min steps
+  const rows = [];
+  for (let m = 10*60; m < 14*60; m += 30) rows.push(m);
+  for (let m = 18*60; m < 21*60; m += 30) rows.push(m);
+
+  const fmtRow = m => {
+    const h = Math.floor(m/60), mn = m%60, h12 = h%12||12, ap = h>=12?'PM':'AM';
+    return h12 + ':' + String(mn).padStart(2,'0') + ' ' + ap;
+  };
+
+  let html = '<div style="display:grid;grid-template-columns:70px repeat(' + TIMETABLE_DOCTORS.length + ',1fr);gap:1px;background:var(--border);border-radius:10px;overflow:hidden;font-size:11px">';
+  // Header row
+  html += '<div style="background:var(--navy);color:#fff;padding:7px 4px;font-weight:700;text-align:center">Time</div>';
+  TIMETABLE_DOCTORS.forEach(d => {
+    html += '<div style="background:var(--navy);color:#fff;padding:7px 4px;font-weight:700;text-align:center">' + d.replace('Dr. ','') + '</div>';
+  });
+
+  let prevWasEvening = false;
+  rows.forEach(m => {
+    if (m === 18*60) {
+      html += '<div style="grid-column:1/-1;background:var(--bg);padding:3px;text-align:center;font-size:9px;color:var(--muted);font-weight:700">EVENING</div>';
+    }
+    const h = Math.floor(m/60), mn = m%60;
+    const hhmm = String(h).padStart(2,'0') + ':' + String(mn).padStart(2,'0');
+    html += '<div style="background:#fff;padding:6px 4px;text-align:center;color:var(--muted);font-weight:600">' + fmtRow(m) + '</div>';
+    TIMETABLE_DOCTORS.forEach(doc => {
+      const periods = clinicHoursForDoctor(doc);
+      const inHours = periods.some(p => m >= p.start && m < p.end);
+      if (!inHours) {
+        html += '<div style="background:#f7f7f7;padding:6px 4px;text-align:center;color:#ccc">—</div>';
+        return;
+      }
+      const slot = byDoc[doc][hhmm];
+      if (slot) {
+        html += '<div style="background:rgba(27,63,107,.08);padding:6px 3px;text-align:center;color:var(--navy);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + slot.patient.replace(/"/g,'') + '">' + (slot.first ? slot.patient : '·') + '</div>';
+      } else {
+        html += '<div style="background:rgba(75,191,176,.08);padding:6px 3px;text-align:center;color:var(--td);font-weight:600;cursor:pointer" onclick="quickBookSlot(\'' + dateStr + '\',\'' + doc + '\',\'' + hhmm + '\')">Free</div>';
+      }
+    });
+  });
+  html += '</div>';
+  grid.innerHTML = html;
+}
+
+function quickBookSlot(dateStr, doctor, timeHHMM) {
+  go('add');
+  document.getElementById('aDate').value = dateStr;
+  document.getElementById('aDoc').value = doctor;
+  setTimeout(() => {
+    updateAvailableSlots().then(() => {
+      const sel = document.getElementById('aTime');
+      for (let i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].value === timeHHMM) { sel.selectedIndex = i; break; }
+      }
+    });
+  }, 100);
+}
+
 function renderAllAppts() {
   const el = document.getElementById('apptList');
   const list = ALL_EVENTS.filter(ev => {
@@ -2939,7 +3622,7 @@ window.addEventListener('load', () => {
   }, 100);
 });
 
-['srchModal','toothModal','editModal','noteModal','tpModal','priceModal','addPriceModal','delModal','delApptModal','editApptModal','payModal','labModal','ptModal','labBillingModal'].forEach(id=>{
+['srchModal','toothModal','editModal','noteModal','tpModal','priceModal','addPriceModal','invModal','addInvModal','delModal','delApptModal','editApptModal','payModal','labModal','ptModal','labBillingModal','botModal'].forEach(id=>{
   document.getElementById(id).addEventListener('click',function(e){if(e.target===this)this.classList.remove('open');});
 });
 </script>
