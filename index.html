@@ -897,9 +897,15 @@ async function syncSheetField(mr, field, value) {
     const url = `${SCRIPT_URL}?action=update&mr=${encodeURIComponent(mr)}&field=${encodeURIComponent(field)}&value=${encodeURIComponent(value)}`;
     const r = await fetch(url);
     const d = await r.json();
-    if(!d.success) console.warn('Sheet sync failed:', field, d.error);
+    if(!d.success) {
+      console.warn('Sheet sync failed:', field, d.error);
+      alert('⚠ Could not sync "' + field + '" to the sheet: ' + (d.error||'unknown error') + '.\n\nThis usually means the sheet is missing a column named exactly "' + field + '", or the CLINIC_SETTINGS row (if this is Prices/Inventory). This device still has the change locally, but other devices will not see it until this is fixed.');
+    }
+    return !!(d && d.success);
   } catch(e) {
     console.error('Sheet sync error:', field, e);
+    alert('⚠ Could not reach the sheet to sync "' + field + '" (' + e.message + '). Check your connection — this device still has the change locally, but other devices will not see it yet.');
+    return false;
   }
 }
 const SCOPES     = 'https://www.googleapis.com/auth/calendar.events';
@@ -985,6 +991,21 @@ function downloadAsPDF(html, filename) {
   }
   win.document.open();
   win.document.write(finalHtml);
+  win.document.close();
+}
+
+// Opens a formatted document in a new tab for reading only — same window
+// mechanics as downloadAsPDF, but without the auto-print trigger, so it's
+// a quick look rather than a forced save/print step.
+function viewDocHTML(html, title) {
+  const titledHtml = html.replace('</head>', '<title>' + (title||'Document') + '</title></head>');
+  const win = window.open('', '_blank');
+  if (!win) {
+    alert('Please allow pop-ups for this site, then try again.');
+    return;
+  }
+  win.document.open();
+  win.document.write(titledHtml);
   win.document.close();
 }
 
@@ -1574,11 +1595,17 @@ function renderProfile(p) {
   ${renderTpChart(mr)}
   ${planHTML}
   <button class="btnP" onclick="openTpModal('${mr}')" style="margin-bottom:12px">+ Add to Treatment Plan</button>
-  <button class="btnP" onclick="downloadTreatmentPlan('${mr}')" style="background:linear-gradient(135deg,var(--teal-d),var(--teal));margin-bottom:12px">📄 Download Treatment Plan PDF</button>
-  
+  <div class="fR" style="margin-bottom:12px">
+    <button class="btnS" onclick="viewTreatmentPlan('${mr}')" style="margin-top:0">👁 View Estimate</button>
+    <button class="btnP" onclick="downloadTreatmentPlan('${mr}')" style="background:linear-gradient(135deg,var(--teal-d),var(--teal));margin-top:0">📄 Download</button>
+  </div>
+
   <div class="sec">Payments & Billing</div>
   <button class="btnP" onclick="openPayModal('${mr}')" style="margin-bottom:8px">💳 View / Add Payments</button>
-  <button class="btnP" onclick="generateReceipt('${mr}')" style="background:linear-gradient(135deg,var(--teal-d),var(--teal));margin-bottom:12px">🧾 Download Receipt</button>
+  <div class="fR" style="margin-bottom:12px">
+    <button class="btnS" onclick="viewReceipt('${mr}')" style="margin-top:0">👁 View Receipt</button>
+    <button class="btnP" onclick="generateReceipt('${mr}')" style="background:linear-gradient(135deg,var(--teal-d),var(--teal));margin-top:0">🧾 Download</button>
+  </div>
 
   <div class="sec">Post-Treatment Instructions</div>
   <button class="btnP" onclick="openPostTreatWA('${phone}','${name}')" style="background:linear-gradient(135deg,#128c7e,#25d366);margin-bottom:12px">💬 Send Post-Treatment WhatsApp</button>
@@ -1587,7 +1614,10 @@ function renderProfile(p) {
   <button class="btnP" onclick="openLabModal('${mr}')" style="margin-bottom:12px">🔬 View / Add Lab Work</button>
 
   <div class="sec">Full Record</div>
-  <button class="btnP" onclick="downloadPatientRecord('${mr}')" style="background:linear-gradient(135deg,#2d3748,#4a5568);margin-bottom:12px">📋 Download Full Patient Record</button>
+  <div class="fR" style="margin-bottom:12px">
+    <button class="btnS" onclick="viewPatientRecord('${mr}')" style="margin-top:0">👁 View Record</button>
+    <button class="btnP" onclick="downloadPatientRecord('${mr}')" style="background:linear-gradient(135deg,#2d3748,#4a5568);margin-top:0">📋 Download</button>
+  </div>
 
   <div class="sec">Treatment History</div>
   ${tlHTML}
@@ -2005,7 +2035,7 @@ function buildTpDiagramHTML(plan) {
   </div>`;
 }
 
-function downloadTreatmentPlan(mr) {
+function downloadTreatmentPlan(mr, mode) {
   const p=PATIENTS.find(x=>getMR(x)===mr);
   if(!p){alert('Patient not found');return;}
   const name=f(p,'Patient Name'), doc=f(p,'Treating Doctor');
@@ -2065,8 +2095,11 @@ function downloadTreatmentPlan(mr) {
   <div class="footer">Smile Hub Clinics · Johar Town, Lahore · Generated: ${today}</div>
   </body></html>`;
 
-  downloadAsPDF(html, `TreatmentPlan_${name.replace(/\s/g,'_')}_${mr}.pdf`);
+  const docTitle = `TreatmentPlan_${name.replace(/\s/g,'_')}_${mr}`;
+  if (mode === 'view') { viewDocHTML(html, docTitle); }
+  else { downloadAsPDF(html, docTitle + '.pdf'); }
 }
+function viewTreatmentPlan(mr) { downloadTreatmentPlan(mr, 'view'); }
 
 // ═══════════════════════════════════════
 // PRICE LIST
@@ -3438,7 +3471,7 @@ function savePayment() {
 
 function closePayModal(){document.getElementById('payModal').classList.remove('open');}
 
-function generateReceipt(mr) {
+function generateReceipt(mr, mode) {
   const p = PATIENTS.find(x=>getMR(x)===mr);
   if(!p) return;
   const name=f(p,'Patient Name'), payments=PAYMENTS[mr]||[];
@@ -3470,8 +3503,11 @@ function generateReceipt(mr) {
   ${pdfDoctorSignatureHTML()}
   <div class="footer">Smile Hub Clinics · Johar Town, Lahore · Thank you for choosing us!</div>
   </body></html>`;
-  downloadAsPDF(html, `Receipt_${name.replace(/\s/g,'_')}_${getMR(p)}.pdf`);
+  const docTitle = `Receipt_${name.replace(/\s/g,'_')}_${getMR(p)}`;
+  if (mode === 'view') { viewDocHTML(html, docTitle); }
+  else { downloadAsPDF(html, docTitle + '.pdf'); }
 }
+function viewReceipt(mr) { generateReceipt(mr, 'view'); }
 
 function updateRevenueStats() {
   const today = new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
@@ -3733,7 +3769,7 @@ function closePtModal(){document.getElementById('ptModal').classList.remove('ope
 // ═══════════════════════════════════════
 // FULL PATIENT RECORD PDF
 // ═══════════════════════════════════════
-function downloadPatientRecord(mr) {
+function downloadPatientRecord(mr, mode) {
   const p = PATIENTS.find(x=>getMR(x)===mr);
   if(!p) return;
   const name=f(p,'Patient Name'), doc=f(p,'Treating Doctor'), phone=getPhone(p);
@@ -3816,8 +3852,11 @@ function downloadPatientRecord(mr) {
   <div class="footer">Record generated: ${today} · Smile Hub Clinics · Johar Town, Lahore · Confidential Medical Record</div>
   </body></html>`;
 
-  downloadAsPDF(html, `PatientRecord_${name.replace(/\s/g,'_')}_${getMR(p)}.pdf`);
+  const docTitle = `PatientRecord_${name.replace(/\s/g,'_')}_${getMR(p)}`;
+  if (mode === 'view') { viewDocHTML(html, docTitle); }
+  else { downloadAsPDF(html, docTitle + '.pdf'); }
 }
+function viewPatientRecord(mr) { downloadPatientRecord(mr, 'view'); }
 
 // ═══════════════════════════════════════
 // UPCOMING APPOINTMENTS
