@@ -2657,10 +2657,10 @@ function toggleBotVoice() {
 function botParseDate(s) {
   s = (s||'').toLowerCase().trim();
   const now = new Date();
-  if (!s || s.indexOf('today') > -1) return now.toISOString().split('T')[0];
+  if (!s || s.indexOf('today') > -1) return botLocalDateStr(now);
   if (s.indexOf('tomorrow') > -1) {
     const t = new Date(now.getTime() + 86400000);
-    return t.toISOString().split('T')[0];
+    return botLocalDateStr(t);
   }
   const m = s.match(/(\d{1,2})[-\/](\d{1,2})/);
   if (m) {
@@ -2689,8 +2689,28 @@ function botParseTime(s) {
 }
 
 // ── Intent router ──
+// ── Continuity state: what the bot remembers within this session ──
+let botLastDoctor = null;
+let botLastDate = null;
+let botPartialIntent = null; // {type, fields:{...}, missing:'time'|'name'|'amount'|'patient'|'item'}
+
+function botLocalDateStr(d) {
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function botDateLabel(dateStr) {
+  return new Date(dateStr+'T12:00:00').toLocaleDateString('en-GB',{weekday:'long',day:'2-digit',month:'short'});
+}
+
 function handleBotMessage(text) {
   const lc = text.toLowerCase().trim();
+
+  // If we asked a follow-up question last turn, try to use this message
+  // as the answer before treating it as a brand new command.
+  if (botPartialIntent) {
+    const handled = tryResolvePartial(text, lc);
+    if (handled) return;
+    botPartialIntent = null; // did not fit — fall through and parse fresh
+  }
 
   if (/how many.*(patient|appointment).*today|today.*(patient|appointment)/.test(lc)) {
     addBotMessage('bot', 'Today: ' + EVENTS.length + ' appointment' + (EVENTS.length===1?'':'s') + ' across the clinic.');
@@ -2713,11 +2733,14 @@ function handleBotMessage(text) {
     return;
   }
   if (lc.indexOf('slots') > -1) {
-    let doctor = 'Dr. Abdullah';
+    let doctorMentioned = null;
     for (let i=0;i<TIMETABLE_DOCTORS.length;i++) {
-      if (lc.indexOf(TIMETABLE_DOCTORS[i].toLowerCase().replace('dr. ','')) > -1) { doctor = TIMETABLE_DOCTORS[i]; break; }
+      if (lc.indexOf(TIMETABLE_DOCTORS[i].toLowerCase().replace('dr. ','')) > -1) { doctorMentioned = TIMETABLE_DOCTORS[i]; break; }
     }
-    const dateStr = botParseDate(lc) || new Date().toISOString().split('T')[0];
+    const doctor = doctorMentioned || botLastDoctor || 'Dr. Abdullah';
+    const dateMentioned = botParseDate(lc);
+    const dateStr = dateMentioned || botLastDate || botLocalDateStr(new Date());
+    botLastDoctor = doctor; botLastDate = dateStr;
     botAnswerSlots(doctor, dateStr);
     return;
   }
@@ -2727,6 +2750,59 @@ function handleBotMessage(text) {
   if (/^used\b|restock|add.*stock|received stock/.test(lc)) { handleBotInventory(text); return; }
 
   addBotMessage('bot', 'I did not understand that. Try:\n- book Ahmed 7pm tomorrow\n- Ahmed paid 3000\n- used 2 gloves\n- how many patients today\n- low stock\n- balance for Ahmed');
+}
+
+// Attempts to complete whatever the bot last asked about, using this
+// message as the missing piece. Returns true if it was used, false if
+// it did not look like an answer (caller then treats it as a fresh command).
+function tryResolvePartial(text, lc) {
+  const p = botPartialIntent;
+
+  if (p.type === 'book') {
+    if (p.missing === 'time') {
+      const t = botParseTime(lc) || botParseTime(text);
+      if (!t) return false;
+      botPartialIntent = null;
+      finalizeBooking(p.fields.name, p.fields.doctor, p.fields.dateStr, t);
+      return true;
+    }
+    if (p.missing === 'name') {
+      const name = text.trim().replace(/\b\w/g, function(c){return c.toUpperCase();});
+      if (!name) return false;
+      botPartialIntent = null;
+      if (!p.fields.timeHHMM) {
+        botPartialIntent = { type:'book', fields:{ name:name, doctor:p.fields.doctor, dateStr:p.fields.dateStr }, missing:'time' };
+        addBotMessage('bot', 'What time should I book ' + name + '? (Doctor: ' + p.fields.doctor + ', Date: ' + botDateLabel(p.fields.dateStr) + ')');
+        return true;
+      }
+      finalizeBooking(name, p.fields.doctor, p.fields.dateStr, p.fields.timeHHMM);
+      return true;
+    }
+  }
+  if (p.type === 'payment') {
+    if (p.missing === 'amount') {
+      const amtMatch = text.match(/(\d[\d,]*)/);
+      if (!amtMatch) return false;
+      botPartialIntent = null;
+      finalizePayment(p.fields.patient, parseFloat(amtMatch[1].replace(/,/g,'')), p.fields.proc);
+      return true;
+    }
+    if (p.missing === 'patient') {
+      const patient = findPat(text.trim());
+      if (!patient) return false;
+      botPartialIntent = null;
+      finalizePayment(patient, p.fields.amount, p.fields.proc);
+      return true;
+    }
+  }
+  if (p.type === 'inventory' && p.missing === 'item') {
+    const itemGuess = text.trim();
+    if (!itemGuess) return false;
+    botPartialIntent = null;
+    finalizeInventory(itemGuess, p.fields.delta);
+    return true;
+  }
+  return false;
 }
 
 function botConfirmCardHTML(title, rows) {
@@ -2761,7 +2837,7 @@ async function botConfirmYes() {
       const row = [action.dateStr, action.name, nextMR, '', '', '', '', action.doctor, '', '', '', '', '', '', 'Active', ''];
       await writeSheet({action:'append', row: JSON.stringify(row)});
     }
-    addBotMessage('bot', ok ? 'Booked ' + action.name + ' with ' + action.doctor + '.' : 'Could not book — please try from the booking form.');
+    addBotMessage('bot', ok ? 'Booked ' + action.name + ' with ' + action.doctor + ' — ' + botDateLabel(action.dateStr) + '.' : 'Could not book — please try from the booking form.');
     if (ok) await initApp();
   }
   else if (action.type === 'payment') {
@@ -2789,13 +2865,17 @@ async function botConfirmYes() {
 
 function handleBotBooking(text) {
   const lc = text.toLowerCase().replace(/^book\b/,'').trim();
-  let doctor = 'Dr. Abdullah';
+
+  let doctorMentioned = null;
   for (let i=0;i<TIMETABLE_DOCTORS.length;i++) {
-    if (lc.indexOf(TIMETABLE_DOCTORS[i].toLowerCase().replace('dr. ','')) > -1) { doctor = TIMETABLE_DOCTORS[i]; break; }
+    if (lc.indexOf(TIMETABLE_DOCTORS[i].toLowerCase().replace('dr. ','')) > -1) { doctorMentioned = TIMETABLE_DOCTORS[i]; break; }
   }
+  const doctor = doctorMentioned || botLastDoctor || 'Dr. Abdullah';
+
   const timeHHMM = botParseTime(lc);
-  if (!timeHHMM) { addBotMessage('bot', 'What time? Try: book Ahmed 7pm tomorrow.'); return; }
-  const dateStr = botParseDate(lc) || new Date().toISOString().split('T')[0];
+
+  const dateMentioned = botParseDate(lc);
+  const dateStr = dateMentioned || botLastDate || botLocalDateStr(new Date());
 
   let nameGuess = text.replace(/^book\b/i,'')
     .replace(/dr\.?\s*(abdullah|athar|hussain|asim)/i,'')
@@ -2805,20 +2885,34 @@ function handleBotBooking(text) {
     .replace(/\d{1,2}[-\/]\d{1,2}/,'')
     .replace(/\bwith\b|\bfor\b|\bat\b/gi,'')
     .trim().replace(/\s+/g,' ');
-  if (!nameGuess) { addBotMessage('bot', 'Who is this for? Try: book Ahmed 7pm tomorrow.'); return; }
   nameGuess = nameGuess.replace(/\b\w/g, function(c){return c.toUpperCase();});
 
-  const existing = findPat(nameGuess);
+  if (!nameGuess) {
+    botPartialIntent = { type:'book', fields:{ doctor:doctor, dateStr:dateStr, timeHHMM:timeHHMM }, missing:'name' };
+    addBotMessage('bot', 'Who is this appointment for? (Doctor: ' + doctor + ', Date: ' + botDateLabel(dateStr) + ')');
+    return;
+  }
+  if (!timeHHMM) {
+    botPartialIntent = { type:'book', fields:{ name:nameGuess, doctor:doctor, dateStr:dateStr }, missing:'time' };
+    addBotMessage('bot', 'What time should I book ' + nameGuess + '? (Doctor: ' + doctor + ', Date: ' + botDateLabel(dateStr) + ')');
+    return;
+  }
+
+  finalizeBooking(nameGuess, doctor, dateStr, timeHHMM);
+}
+
+function finalizeBooking(name, doctor, dateStr, timeHHMM) {
+  botLastDoctor = doctor; botLastDate = dateStr;
+  const existing = findPat(name);
   const h = parseInt(timeHHMM.split(':')[0]), mn = parseInt(timeHHMM.split(':')[1]);
   const h12 = h%12||12, ap = h>=12?'PM':'AM';
   const timeLabel = h12+':'+String(mn).padStart(2,'0')+' '+ap;
-  const dateLabel = new Date(dateStr+'T12:00:00').toLocaleDateString('en-GB',{weekday:'long',day:'2-digit',month:'short'});
 
-  botPendingAction = { type:'book', name:nameGuess, doctor:doctor, dateStr:dateStr, timeHHMM:timeHHMM, existing: !!existing };
+  botPendingAction = { type:'book', name:name, doctor:doctor, dateStr:dateStr, timeHHMM:timeHHMM, existing: !!existing };
   const cardHTML = botConfirmCardHTML('Book Appointment', [
-    ['Patient', nameGuess + (existing?' (returning)':' (new)')],
+    ['Patient', name + (existing?' (returning)':' (new)')],
     ['Doctor', doctor],
-    ['Date', dateLabel],
+    ['Date', botDateLabel(dateStr)],
     ['Time', timeLabel]
   ]);
   addBotMessage('bot', 'Here is what I got — confirm to book:', cardHTML);
@@ -2826,16 +2920,27 @@ function handleBotBooking(text) {
 
 function handleBotPayment(text) {
   const amtMatch = text.match(/(\d[\d,]*)/);
-  if (!amtMatch) { addBotMessage('bot', 'How much? Try: Ahmed paid 3000.'); return; }
-  const amount = parseFloat(amtMatch[1].replace(/,/g,''));
+  const amount = amtMatch ? parseFloat(amtMatch[1].replace(/,/g,'')) : null;
 
   let nameGuess = text.replace(/paid|payment|received|rs\.?|pkr/gi,'').replace(/\d[\d,]*/,'').replace(/\bfor\b.*/i,'').trim().replace(/\s+/g,' ');
   const procMatch = text.match(/for\s+([a-zA-Z ]+)$/i);
   const proc = procMatch ? procMatch[1].trim() : '';
+  const patient = nameGuess ? findPat(nameGuess) : null;
 
-  const patient = findPat(nameGuess);
-  if (!patient) { addBotMessage('bot', 'Could not find a patient matching "' + nameGuess + '". Try their full name.'); return; }
+  if (!patient) {
+    botPartialIntent = { type:'payment', fields:{ amount:amount, proc:proc }, missing:'patient' };
+    addBotMessage('bot', 'Which patient is this payment for?');
+    return;
+  }
+  if (amount === null) {
+    botPartialIntent = { type:'payment', fields:{ patient:patient, proc:proc }, missing:'amount' };
+    addBotMessage('bot', 'How much did ' + f(patient,'Patient Name') + ' pay?');
+    return;
+  }
+  finalizePayment(patient, amount, proc);
+}
 
+function finalizePayment(patient, amount, proc) {
   botPendingAction = { type:'payment', patient:patient, amount:amount, proc:proc };
   const cardHTML = botConfirmCardHTML('Log Payment', [
     ['Patient', f(patient,'Patient Name')],
@@ -2853,8 +2958,15 @@ function handleBotInventory(text) {
   const delta = isUsed ? -qty : qty;
 
   let itemGuess = text.replace(/^used\b|restock|add|received stock/i,'').replace(/\d+/,'').replace(/\bof\b/i,'').trim();
-  if (!itemGuess) { addBotMessage('bot', 'Which item? Try: used 2 gloves.'); return; }
+  if (!itemGuess) {
+    botPartialIntent = { type:'inventory', fields:{ delta:delta }, missing:'item' };
+    addBotMessage('bot', 'Which item?');
+    return;
+  }
+  finalizeInventory(itemGuess, delta);
+}
 
+function finalizeInventory(itemGuess, delta) {
   let existingIdx = -1;
   for (let i=0;i<INVENTORY.length;i++) {
     if (INVENTORY[i].name.toLowerCase().indexOf(itemGuess.toLowerCase())>-1 || itemGuess.toLowerCase().indexOf(INVENTORY[i].name.toLowerCase())>-1) { existingIdx = i; break; }
@@ -2871,37 +2983,34 @@ function handleBotInventory(text) {
   addBotMessage('bot', 'Confirm this stock update:', cardHTML);
 }
 
-async function botAnswerSlots(doctor, dateStr) {
-  const calId = calIdForDoctor(doctor);
+// Reuses ALL_EVENTS (the same already-fetched, already-correct data that
+// powers the Timetable view) instead of a separate calendar fetch — keeps
+// the two views from ever disagreeing about what is actually booked.
+function botAnswerSlots(doctor, dateStr) {
   const periods = clinicHoursForDoctor(doctor);
-  try {
-    const s = new Date(dateStr + 'T00:00:00');
-    const e = new Date(dateStr + 'T23:59:59');
-    const r = await fetch('https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(calId)+'/events?timeMin='+s.toISOString()+'&timeMax='+e.toISOString()+'&orderBy=startTime&singleEvents=true', {headers:{Authorization:'Bearer '+token}});
-    const d = await r.json();
-    const dayEvents = d.items || [];
-    const booked = [];
-    dayEvents.forEach(function(ev) {
-      if (ev.start && ev.start.dateTime) {
-        const st = new Date(ev.start.dateTime), en = new Date(ev.end.dateTime);
-        booked.push({start: st.getHours()*60+st.getMinutes(), end: en.getHours()*60+en.getMinutes()});
+  const dayEvents = ALL_EVENTS.filter(function(ev) {
+    const sISO = ev.start && ev.start.dateTime;
+    if (!sISO) return false;
+    if (sISO.split('T')[0] !== dateStr) return false;
+    return parseDoctorFromTitle(ev.summary) === doctor;
+  });
+  const booked = dayEvents.map(function(ev) {
+    const st = new Date(ev.start.dateTime), en = new Date(ev.end.dateTime);
+    return { start: st.getHours()*60+st.getMinutes(), end: en.getHours()*60+en.getMinutes() };
+  });
+  const dur = 45;
+  const free = [];
+  periods.forEach(function(period) {
+    for (let m = period.start; m+dur <= period.end; m += 30) {
+      const clash = booked.some(function(b){ return m < b.end && (m+dur) > b.start; });
+      if (!clash) {
+        const h = Math.floor(m/60), mn = m%60, h12 = h%12||12, ap = h>=12?'PM':'AM';
+        free.push(h12+':'+String(mn).padStart(2,'0')+' '+ap);
       }
-    });
-    const dur = 45;
-    const free = [];
-    periods.forEach(function(period) {
-      for (let m = period.start; m+dur <= period.end; m += 30) {
-        const clash = booked.some(function(b){ return m < b.end && (m+dur) > b.start; });
-        if (!clash) {
-          const h = Math.floor(m/60), mn = m%60, h12 = h%12||12, ap = h>=12?'PM':'AM';
-          free.push(h12+':'+String(mn).padStart(2,'0')+' '+ap);
-        }
-      }
-    });
-    addBotMessage('bot', free.length ? doctor + ' free slots:\n' + free.map(function(s){return '- '+s;}).join('\n') : 'No free slots for ' + doctor + ' on that date.');
-  } catch(err) {
-    addBotMessage('bot', 'Could not check the calendar right now.');
-  }
+    }
+  });
+  const header = doctor + ' — ' + botDateLabel(dateStr);
+  addBotMessage('bot', header + '\n' + (free.length ? 'Free slots:\n' + free.map(function(s){return '- '+s;}).join('\n') : 'No free slots that day.'));
 }
 
 function checkExisting(name) {
