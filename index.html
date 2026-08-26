@@ -922,12 +922,66 @@ const CHAT_SHORTCUT = new URLSearchParams(window.location.search).get('open') ==
 let chatShortcutHandled = false;
 if (CHAT_SHORTCUT) document.title = 'Smile Hub Chat';
 
-function pdfHeaderHTML(subtitle, showPhone) {
-  return `<div style="text-align:center;border-bottom:3px solid #1B3F6B;padding-bottom:16px;margin-bottom:20px">
-    <img src="${SH_LOGO_B64}" style="height:64px;margin-bottom:6px" alt="Smile Hub Clinics">
-    <div style="font-size:11px;color:#6b7a8d;margin-top:2px">599 Main Blvd, Q Block, Phase II, Johar Town, Lahore${showPhone?' · '+CLINIC_PHONE:''}</div>
-    ${subtitle?`<div style="font-weight:700;color:#1B3F6B;font-size:13px;margin-top:6px;letter-spacing:.5px">${subtitle}</div>`:''}
+// Shared "design system" injected into every generated document (Estimate,
+// Invoice, Patient Record) so all three read as one professional document
+// family instead of three separately-styled pages.
+const PDF_DOC_STYLE = `
+  *{box-sizing:border-box}
+  body{font-family:'Segoe UI',-apple-system,Helvetica,Arial,sans-serif;color:#1a2332;max-width:720px;margin:0 auto;padding:40px 36px;font-size:13px;line-height:1.55}
+  .doc-header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:20px;border-bottom:2px solid #1B3F6B;margin-bottom:26px;gap:20px}
+  .doc-header-left{display:flex;align-items:center;gap:12px}
+  .doc-header-left img{height:50px;display:block}
+  .doc-clinic-name{font-size:17px;font-weight:700;color:#1B3F6B;letter-spacing:.2px}
+  .doc-clinic-addr{font-size:10.5px;color:#6b7a8d;margin-top:3px;line-height:1.6}
+  .doc-header-right{text-align:right;flex-shrink:0}
+  .doc-title{font-size:19px;font-weight:800;color:#1B3F6B;letter-spacing:1.5px;text-transform:uppercase}
+  .doc-meta{font-size:10.5px;color:#9aa5b1;margin-top:5px}
+  .doc-parties{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:26px}
+  .doc-party-label{font-size:9.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#9aa5b1;margin-bottom:5px}
+  .doc-party-name{font-size:14px;font-weight:700;color:#1a2332}
+  .doc-party-sub{font-size:11.5px;color:#6b7a8d;margin-top:3px;line-height:1.6}
+  .doc-section-label{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#1B3F6B;margin:24px 0 8px}
+  table.doc-table{width:100%;border-collapse:collapse;margin-bottom:4px}
+  table.doc-table thead th{font-size:9.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#6b7a8d;text-align:left;padding:0 10px 8px;border-bottom:1.5px solid #1a2332}
+  table.doc-table tbody td{padding:10px 10px;font-size:12.5px;border-bottom:1px solid #eef1f4;vertical-align:top}
+  table.doc-table tbody tr:last-child td{border-bottom:1.5px solid #1a2332}
+  .doc-num{text-align:right}
+  .doc-center{text-align:center}
+  .doc-totals{margin-left:auto;width:280px;margin-top:8px}
+  .doc-totals-row{display:flex;justify-content:space-between;padding:6px 0;font-size:12.5px;color:#4a5568}
+  .doc-totals-row .neg{color:#c53030}
+  .doc-totals-row.grand{border-top:1.5px solid #1a2332;margin-top:6px;padding-top:12px;font-size:17px;font-weight:800}
+  .doc-totals-row.grand .amt{color:#1B3F6B}
+  .doc-totals-row.grand .amt.due{color:#c53030}
+  .doc-footer{text-align:center;font-size:10px;color:#9aa5b1;border-top:1px solid #eef1f4;padding-top:16px;margin-top:36px}
+  .doc-note{font-size:10.5px;color:#9aa5b1;font-style:italic;margin-top:12px}
+  .doc-sig{display:grid;grid-template-columns:1fr 1fr;gap:50px;margin-top:48px}
+  .doc-sig-line{border-top:1px solid #cbd5e0;padding-top:8px;font-size:10.5px;color:#6b7a8d;text-align:center}
+  .doc-alert{background:#fff5f5;border:1px solid #feb2b2;border-radius:6px;padding:12px 14px;margin-bottom:20px;color:#c53030;font-size:12px}
+`;
+
+function pdfHeaderHTML(subtitle, showPhone, docId) {
+  return `<div class="doc-header">
+    <div class="doc-header-left">
+      <img src="${SH_LOGO_B64}" alt="Smile Hub Clinics">
+      <div>
+        <div class="doc-clinic-name">Smile Hub Clinics</div>
+        <div class="doc-clinic-addr">599 Main Blvd, Q Block, Phase II, Johar Town, Lahore${showPhone?'<br>'+CLINIC_PHONE:''}</div>
+      </div>
+    </div>
+    ${subtitle?`<div class="doc-header-right">
+      <div class="doc-title">${subtitle}</div>
+      ${docId?`<div class="doc-meta">${docId}</div>`:''}
+    </div>`:''}
   </div>`;
+}
+
+// Deterministic reference number (same patient + same day always produces
+// the same ID) — no counter/state needed, just a professional touch.
+function pdfDocId(prefix, mr) {
+  const d = new Date();
+  const stamp = d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+  return prefix + '-' + mr + '-' + stamp;
 }
 
 // Two-signature block (patient + doctor) used on documents where the
@@ -936,14 +990,14 @@ function pdfHeaderHTML(subtitle, showPhone) {
 // empty spacer matching the doctor's signature-image height so neither
 // line is pushed down relative to the other.
 function pdfSignatureHTML() {
-  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:40px">
+  return `<div class="doc-sig">
     <div style="text-align:center">
-      <div style="height:38px;margin-bottom:-4px"></div>
-      <div style="border-top:1px solid #2d3748;padding-top:8px;font-size:11px;color:#6b7a8d">Patient Signature &amp; Date</div>
+      <div style="height:36px;margin-bottom:-4px"></div>
+      <div class="doc-sig-line">Patient Signature &amp; Date</div>
     </div>
     <div style="text-align:center">
-      <img src="${SH_SIG_B64}" style="height:38px;margin-bottom:-4px" alt="Signature">
-      <div style="border-top:1px solid #2d3748;padding-top:6px;font-size:11px;color:#6b7a8d">Dr. Abdullah Karamat BDS, FCPS<br>Prosthodontist &amp; Implantologist</div>
+      <img src="${SH_SIG_B64}" style="height:34px;margin-bottom:-4px" alt="Signature">
+      <div class="doc-sig-line">Dr. Abdullah Karamat BDS, FCPS<br>Prosthodontist &amp; Implantologist</div>
     </div>
   </div>`;
 }
@@ -952,9 +1006,9 @@ function pdfSignatureHTML() {
 // documents that don't need patient acknowledgement, e.g. payment
 // receipts/invoices.
 function pdfDoctorSignatureHTML() {
-  return `<div style="margin-top:40px;max-width:230px;margin-left:auto;margin-right:auto;text-align:center">
-    <img src="${SH_SIG_B64}" style="height:38px;margin-bottom:-4px" alt="Signature">
-    <div style="border-top:1px solid #2d3748;padding-top:6px;font-size:11px;color:#6b7a8d">Dr. Abdullah Karamat BDS, FCPS<br>Prosthodontist &amp; Implantologist</div>
+  return `<div style="margin-top:48px;max-width:230px;margin-left:auto;margin-right:auto;text-align:center">
+    <img src="${SH_SIG_B64}" style="height:34px;margin-bottom:-4px" alt="Signature">
+    <div class="doc-sig-line">Dr. Abdullah Karamat BDS, FCPS<br>Prosthodontist &amp; Implantologist</div>
   </div>`;
 }
 
@@ -1599,6 +1653,7 @@ function renderProfile(p) {
     <button class="btnS" onclick="viewTreatmentPlan('${mr}')" style="margin-top:0">👁 View Estimate</button>
     <button class="btnP" onclick="downloadTreatmentPlan('${mr}')" style="background:linear-gradient(135deg,var(--teal-d),var(--teal));margin-top:0">📄 Download</button>
   </div>
+  ${plan.length?`<button class="btnS" onclick="clearTreatmentPlan('${mr}')" style="color:var(--red);border-color:rgba(229,62,62,.3);margin-bottom:12px">🗑 Clear Entire Plan</button>`:''}
 
   <div class="sec">Payments & Billing</div>
   <button class="btnP" onclick="openPayModal('${mr}')" style="margin-bottom:8px">💳 View / Add Payments</button>
@@ -1992,6 +2047,13 @@ function deleteTpItem(mr,idx) {
     refreshProfile(mr);
   }
 }
+function clearTreatmentPlan(mr) {
+  if (!confirm('Delete the ENTIRE treatment plan for this patient? This removes every procedure and cannot be undone.')) return;
+  TREATMENT_PLANS[mr] = [];
+  localStorage.setItem('smilehub_plans', JSON.stringify(TREATMENT_PLANS));
+  syncSheetField(mr, 'Treatment Plan JSON', JSON.stringify(TREATMENT_PLANS[mr]));
+  refreshProfile(mr);
+}
 function closeTpModal(){document.getElementById('tpModal').classList.remove('open');}
 
 // ═══════════════════════════════════════
@@ -2038,7 +2100,7 @@ function buildTpDiagramHTML(plan) {
 function downloadTreatmentPlan(mr, mode) {
   const p=PATIENTS.find(x=>getMR(x)===mr);
   if(!p){alert('Patient not found');return;}
-  const name=f(p,'Patient Name'), doc=f(p,'Treating Doctor');
+  const name=f(p,'Patient Name'), doc=f(p,'Treating Doctor'), phone=getPhone(p);
   const plan=TREATMENT_PLANS[mr]||[];
   const grouped=groupByProc(plan);
   const total=grouped.reduce((s,g)=>s+g.totalCost,0);
@@ -2046,50 +2108,42 @@ function downloadTreatmentPlan(mr, mode) {
   const payable=total-totalDiscount;
   const today=new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
 
-  const rows=grouped.map((g,i)=>`
-    <tr style="background:${i%2===0?'#f8fafc':'#fff'}">
-      <td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">${g.proc}</td>
-      <td style="padding:8px 12px;border:1px solid #e2e8f0">${g.teeth||'—'}</td>
-      <td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:center">PKR ${Math.round(g.unitPrice).toLocaleString()}</td>
-      <td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:center">${g.qty}</td>
-      <td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:right">PKR ${g.totalCost.toLocaleString()}</td>
-      <td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:right;color:#e53e3e">${g.discount>0?'−'+g.discount.toLocaleString():'—'}</td>
-      <td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:right;font-weight:700;color:#1B3F6B">PKR ${g.payable.toLocaleString()}</td>
+  const rows=grouped.map(g=>`
+    <tr>
+      <td style="font-weight:600">${g.proc}${g.teeth?` <span style="color:#9aa5b1;font-weight:400">· Tooth ${g.teeth}</span>`:''}</td>
+      <td class="doc-num">PKR ${Math.round(g.unitPrice).toLocaleString()}</td>
+      <td class="doc-center">${g.qty}</td>
+      <td class="doc-num">PKR ${g.totalCost.toLocaleString()}</td>
+      <td class="doc-num${g.discount>0?' neg':''}">${g.discount>0?'−'+g.discount.toLocaleString():'—'}</td>
+      <td class="doc-num" style="font-weight:700;color:#1B3F6B">PKR ${g.payable.toLocaleString()}</td>
     </tr>`).join('');
 
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Treatment Plan - ${name}</title>
-  <style>body{font-family:Arial,sans-serif;max-width:700px;margin:0 auto;padding:30px;color:#1a2332}
-  .header{text-align:center;border-bottom:3px solid #1B3F6B;padding-bottom:20px;margin-bottom:24px}
-  .logo{font-size:24px;font-weight:700;color:#1B3F6B}.sub{font-size:12px;color:#6b7a8d;margin-top:4px}
-  .pInfo{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px}
-  .pBox{background:#f8fafc;border-radius:8px;padding:12px;border:1px solid #e2e8f0}
-  .pLbl{font-size:10px;color:#6b7a8d;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:3px}
-  .pVal{font-size:14px;font-weight:600}
-  table{width:100%;border-collapse:collapse;margin-bottom:20px}
-  th{background:#1B3F6B;color:#fff;padding:10px 12px;text-align:left;font-size:12px}
-  .total{background:linear-gradient(135deg,#122d4e,#1B3F6B);color:#fff;border-radius:10px;padding:16px 20px;margin-bottom:24px}
-  .footer{text-align:center;font-size:11px;color:#6b7a8d;border-top:1px solid #e2e8f0;padding-top:16px;margin-top:24px}
-  .sig{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:40px}
-  .sigLine{border-top:1px solid #2d3748;padding-top:8px;font-size:11px;color:#6b7a8d;text-align:center}
-  </style></head><body>
-  ${pdfHeaderHTML('TREATMENT PLAN', true)}
-  <div class="pInfo">
-    <div class="pBox"><div class="pLbl">Patient Name</div><div class="pVal">${name}</div></div>
-    <div class="pBox"><div class="pLbl">MR Number</div><div class="pVal">${mr}</div></div>
-    <div class="pBox"><div class="pLbl">Date</div><div class="pVal">${today}</div></div>
-    <div class="pBox"><div class="pLbl">Treating Doctor</div><div class="pVal">${doc||'Dr. Abdullah Karamat'}</div></div>
+  <style>${PDF_DOC_STYLE}</style></head><body>
+  ${pdfHeaderHTML('Treatment Estimate', true, pdfDocId('EST', mr))}
+  <div class="doc-parties">
+    <div>
+      <div class="doc-party-label">Prepared For</div>
+      <div class="doc-party-name">${name}</div>
+      <div class="doc-party-sub">MR: ${mr}${phone?'<br>'+phone:''}</div>
+    </div>
+    <div style="text-align:right">
+      <div class="doc-party-label">Details</div>
+      <div class="doc-party-sub"><b>Date:</b> ${today}<br><b>Treating Doctor:</b> ${doc||'Dr. Abdullah Karamat'}</div>
+    </div>
   </div>
   ${buildTpDiagramHTML(plan)}
   ${grouped.length?`
-  <table><thead><tr><th>Procedure</th><th>Tooth</th><th>Unit Price</th><th>Qty</th><th>Amount</th><th>Discount</th><th>Payable</th></tr></thead><tbody>${rows}</tbody></table>
-  <div class="total">
-    <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Total Cost:</span><span style="font-weight:600">PKR ${total.toLocaleString()}</span></div>
-    ${totalDiscount>0?`<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Total Discount:</span><span style="font-weight:600;color:#fc8181">−PKR ${totalDiscount.toLocaleString()}</span></div>`:''}
-    <div style="display:flex;justify-content:space-between;border-top:1px solid rgba(255,255,255,.25);padding-top:8px"><span style="font-size:15px">Payable Amount:</span><span style="font-size:22px;font-weight:700">PKR ${payable.toLocaleString()}</span></div>
-  </div>`:'<p style="color:#6b7a8d;text-align:center;padding:20px">No treatment plan items added yet.</p>'}
-  <p style="font-size:11px;color:#6b7a8d;font-style:italic">* This treatment plan is an estimate and may be revised based on clinical findings. Final costs may vary.</p>
+  <div class="doc-section-label">Proposed Procedures</div>
+  <table class="doc-table"><thead><tr><th>Procedure</th><th class="doc-num">Unit Price</th><th class="doc-center">Qty</th><th class="doc-num">Amount</th><th class="doc-num">Discount</th><th class="doc-num">Payable</th></tr></thead><tbody>${rows}</tbody></table>
+  <div class="doc-totals">
+    <div class="doc-totals-row"><span>Total Cost</span><span>PKR ${total.toLocaleString()}</span></div>
+    ${totalDiscount>0?`<div class="doc-totals-row"><span>Total Discount</span><span class="neg">−PKR ${totalDiscount.toLocaleString()}</span></div>`:''}
+    <div class="doc-totals-row grand"><span>Payable Amount</span><span class="amt">PKR ${payable.toLocaleString()}</span></div>
+  </div>
+  <div class="doc-note">This treatment plan is an estimate and may be revised based on clinical findings. Final costs may vary.</div>`:'<p style="color:#9aa5b1;text-align:center;padding:24px 0">No treatment plan items added yet.</p>'}
   ${pdfSignatureHTML()}
-  <div class="footer">Smile Hub Clinics · Johar Town, Lahore · Generated: ${today}</div>
+  <div class="doc-footer">Smile Hub Clinics · Johar Town, Lahore · Generated ${today}</div>
   </body></html>`;
 
   const docTitle = `TreatmentPlan_${name.replace(/\s/g,'_')}_${mr}`;
@@ -2743,7 +2797,7 @@ function escapeHtml(s) {
 function openBotChat() {
   document.getElementById('botModal').classList.add('open');
   if (!BOT_MESSAGES.length) {
-    addBotMessage('bot', 'Hi! I can help you book appointments, log payments, update inventory, fetch documents, or answer quick questions.\n\nTry:\n- book Ahmed 7pm tomorrow with Dr. Abdullah\n- Ahmed paid 3000 for scaling\n- used 2 gloves\n- invoice for Ahmed\n- treatment plan for Ahmed\n- how many patients today\n- low stock\n- balance for Ahmed');
+    addBotMessage('bot', 'Hi! I can help you book appointments, log payments, update inventory, fetch documents, or answer quick questions.\n\nTry:\n- book Ahmed 7pm tomorrow with Dr. Abdullah\n- Dr. Abdullah\'s Thursday schedule\n- slots for Athar tomorrow\n- Ahmed paid 3000 for scaling\n- used 2 gloves\n- invoice for Ahmed\n- treatment plan for Ahmed\n- how many patients today\n- low stock\n- balance for Ahmed');
   }
   setTimeout(function(){ document.getElementById('botInput').focus(); }, 200);
 }
@@ -2823,6 +2877,20 @@ function toggleBotVoice() {
 }
 
 // ── Date / time parsing (client-side port of the WhatsApp bot logic) ──
+const BOT_WEEKDAYS = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+function botParseDayOfWeek(s) {
+  for (let i=0;i<BOT_WEEKDAYS.length;i++) {
+    if (s.indexOf(BOT_WEEKDAYS[i]) > -1) {
+      const now = new Date();
+      let diff = i - now.getDay();
+      if (diff < 0) diff += 7; // next occurrence, or today if it matches
+      const target = new Date(now.getTime());
+      target.setDate(target.getDate() + diff);
+      return botLocalDateStr(target);
+    }
+  }
+  return null;
+}
 function botParseDate(s) {
   s = (s||'').toLowerCase().trim();
   const now = new Date();
@@ -2836,6 +2904,8 @@ function botParseDate(s) {
     const yr = now.getFullYear();
     return yr + '-' + String(m[2]).padStart(2,'0') + '-' + String(m[1]).padStart(2,'0');
   }
+  const dow = botParseDayOfWeek(s);
+  if (dow) return dow;
   return null;
 }
 function botParseTime(s) {
@@ -2902,6 +2972,18 @@ function handleBotMessage(text) {
     addBotMessage('bot', f(p,'Patient Name') + ' — Balance: PKR ' + ((charged-discount-paid)).toLocaleString());
     return;
   }
+  if (/\bschedule\b|\bbooked\b|appointments? for/.test(lc) && !/how many/.test(lc)) {
+    let doctorMentioned = null;
+    for (let i=0;i<TIMETABLE_DOCTORS.length;i++) {
+      if (lc.indexOf(TIMETABLE_DOCTORS[i].toLowerCase().replace('dr. ','')) > -1) { doctorMentioned = TIMETABLE_DOCTORS[i]; break; }
+    }
+    const doctor = doctorMentioned || botLastDoctor || 'Dr. Abdullah';
+    const dateMentioned = botParseDate(lc);
+    const dateStr = dateMentioned || botLastDate || botLocalDateStr(new Date());
+    botLastDoctor = doctor; botLastDate = dateStr;
+    botAnswerSchedule(doctor, dateStr);
+    return;
+  }
   if (lc.indexOf('slots') > -1) {
     let doctorMentioned = null;
     for (let i=0;i<TIMETABLE_DOCTORS.length;i++) {
@@ -2923,7 +3005,7 @@ function handleBotMessage(text) {
   if (/paid|payment|received.*\d/.test(lc)) { handleBotPayment(text); return; }
   if (/^used\b|restock|add.*stock|received stock/.test(lc)) { handleBotInventory(text); return; }
 
-  addBotMessage('bot', 'I did not understand that. Try:\n- book Ahmed 7pm tomorrow\n- Ahmed paid 3000\n- used 2 gloves\n- invoice for Ahmed\n- treatment plan for Ahmed\n- how many patients today\n- low stock\n- balance for Ahmed');
+  addBotMessage('bot', 'I did not understand that. Try:\n- book Ahmed 7pm tomorrow\n- Dr. Abdullah\'s Thursday schedule\n- slots for Athar tomorrow\n- Ahmed paid 3000\n- used 2 gloves\n- invoice for Ahmed\n- treatment plan for Ahmed\n- how many patients today\n- low stock\n- balance for Ahmed');
 }
 
 // Fetches an existing PDF (invoice / treatment plan / patient record) for
@@ -3227,6 +3309,33 @@ function botAnswerSlots(doctor, dateStr) {
   addBotMessage('bot', header + '\n' + (free.length ? 'Free slots:\n' + free.map(function(s){return '- '+s;}).join('\n') : 'No free slots that day.'));
 }
 
+// Shows what's actually BOOKED for a doctor on a given day — the reverse
+// of botAnswerSlots (which only shows what's free). Reuses ALL_EVENTS, the
+// same data source as the Timetable view, so the two can never disagree.
+function botAnswerSchedule(doctor, dateStr) {
+  const dayEvents = ALL_EVENTS.filter(function(ev) {
+    const sISO = ev.start && ev.start.dateTime;
+    if (!sISO) return false;
+    if (sISO.split('T')[0] !== dateStr) return false;
+    return parseDoctorFromTitle(ev.summary) === doctor;
+  }).sort(function(a,b){ return new Date(a.start.dateTime) - new Date(b.start.dateTime); });
+
+  const header = doctor + ' — ' + botDateLabel(dateStr);
+  if (!dayEvents.length) {
+    addBotMessage('bot', header + '\nNo appointments booked that day.');
+    return;
+  }
+  const lines = dayEvents.map(function(ev) {
+    const d = new Date(ev.start.dateTime);
+    const h = d.getHours(), mn = d.getMinutes(), h12 = h%12||12, ap = h>=12?'PM':'AM';
+    const timeLabel = h12+':'+String(mn).padStart(2,'0')+' '+ap;
+    const pName = (ev.summary||'').split(' - ')[0].replace(/\[.*?\]/g,'').replace(/\?\?/g,'').trim();
+    const treat = (ev.summary||'').split(' - ').slice(1).join(' - ');
+    return '- ' + timeLabel + ': ' + pName + (treat ? ' (' + treat + ')' : '');
+  });
+  addBotMessage('bot', header + ' — ' + dayEvents.length + ' appointment' + (dayEvents.length===1?'':'s') + '\n' + lines.join('\n'));
+}
+
 function checkExisting(name) {
   const p=findPat(name);
   const nf=document.getElementById('newPF'), ep=document.getElementById('existPat'), ei=document.getElementById('existInfo');
@@ -3476,16 +3585,44 @@ function renderPayHistory(mr) {
       <div><div style="font-size:10px;opacity:.7">PAID</div><div style="font-weight:700">PKR ${total_paid.toLocaleString()}</div></div>
       <div><div style="font-size:10px;opacity:.7">BALANCE</div><div style="font-weight:700;color:${balance>0?'#fc8181':'#68d391'}">PKR ${balance.toLocaleString()}</div></div>
     </div>
-    ${payments.slice().reverse().map((pay,i)=>{
+    ${payments.slice().reverse().map((pay,ri)=>{
       const disc=parseFloat(pay.discount)||0;
+      const origIdx = payments.length - 1 - ri;
       return `
     <div style="background:var(--card);border-radius:9px;padding:10px 12px;margin-bottom:7px;border:1px solid var(--border);font-size:12px">
-      <div style="display:flex;justify-content:space-between;align-items:center">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
         <div><strong>${pay.proc||'General'}</strong> · ${pay.date}</div>
-        <div style="text-align:right"><div style="color:var(--navy);font-weight:700">PKR ${(parseFloat(pay.paid)||0).toLocaleString()}</div><div style="color:var(--muted);font-size:10px">of PKR ${(parseFloat(pay.charged)||0).toLocaleString()}${disc>0?' (−'+disc.toLocaleString()+' off)':''}</div></div>
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+          <div style="text-align:right"><div style="color:var(--navy);font-weight:700">PKR ${(parseFloat(pay.paid)||0).toLocaleString()}</div><div style="color:var(--muted);font-size:10px">of PKR ${(parseFloat(pay.charged)||0).toLocaleString()}${disc>0?' (−'+disc.toLocaleString()+' off)':''}</div></div>
+          <button onclick="deletePayment('${mr}',${origIdx})" title="Delete this payment" style="width:22px;height:22px;flex-shrink:0;border-radius:6px;border:none;background:rgba(229,62,62,.1);color:var(--red);font-size:12px;cursor:pointer">✕</button>
+        </div>
       </div>
       <div style="color:var(--muted);margin-top:3px">${pay.method}${pay.note?' · '+pay.note:''}</div>
-    </div>`;}).join('')}` : '<div style="color:var(--muted);font-size:12px;text-align:center;padding:12px">No payments recorded yet</div>';
+    </div>`;}).join('')}
+    <button class="btnS" onclick="clearAllPayments('${mr}')" style="color:var(--red);border-color:rgba(229,62,62,.3)">🗑 Clear All Payment History</button>
+    ` : '<div style="color:var(--muted);font-size:12px;text-align:center;padding:12px">No payments recorded yet</div>';
+}
+
+function deletePayment(mr, idx) {
+  if (!confirm('Delete this payment entry? This cannot be undone.')) return;
+  if (!PAYMENTS[mr]) return;
+  PAYMENTS[mr].splice(idx, 1);
+  localStorage.setItem('smilehub_payments', JSON.stringify(PAYMENTS));
+  syncSheetField(mr, 'Payments JSON', JSON.stringify(PAYMENTS[mr]));
+  renderPayHistory(mr);
+  updateRevenueStats();
+  renderBalances();
+}
+
+function clearAllPayments(mr) {
+  if (!confirm('Delete ALL payment history for this patient? This is a financial record and cannot be undone.')) return;
+  if (!confirm('Are you absolutely sure? This permanently erases every payment entry for this patient.')) return;
+  PAYMENTS[mr] = [];
+  localStorage.setItem('smilehub_payments', JSON.stringify(PAYMENTS));
+  syncSheetField(mr, 'Payments JSON', JSON.stringify(PAYMENTS[mr]));
+  renderPayHistory(mr);
+  updateRevenueStats();
+  renderBalances();
 }
 
 function savePayment() {
@@ -3518,7 +3655,7 @@ function closePayModal(){document.getElementById('payModal').classList.remove('o
 function generateReceipt(mr, mode) {
   const p = PATIENTS.find(x=>getMR(x)===mr);
   if(!p) return;
-  const name=f(p,'Patient Name'), payments=PAYMENTS[mr]||[];
+  const name=f(p,'Patient Name'), phone=getPhone(p), payments=PAYMENTS[mr]||[];
   const total_charged=payments.reduce((s,pay)=>s+(parseFloat(pay.charged)||0),0);
   const total_discount=payments.reduce((s,pay)=>s+(parseFloat(pay.discount)||0),0);
   const total_paid=payments.reduce((s,pay)=>s+(parseFloat(pay.paid)||0),0);
@@ -3536,40 +3673,44 @@ function generateReceipt(mr, mode) {
     }
   });
   const grouped = groupByProc(allItems);
-  const itemRows = grouped.map((g,i)=>`
-    <tr style="background:${i%2===0?'#f8fafc':'#fff'}">
-      <td style="padding:8px 12px;border:1px solid #e2e8f0;font-weight:600">${g.proc}${g.teeth?` <span style="color:#6b7a8d;font-weight:400;font-size:10px">(Tooth ${g.teeth})</span>`:''}</td>
-      <td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:center">PKR ${Math.round(g.unitPrice).toLocaleString()}</td>
-      <td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:center">${g.qty}</td>
-      <td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:right">PKR ${g.totalCost.toLocaleString()}</td>
-      <td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:right;color:#e53e3e">${g.discount>0?'−'+g.discount.toLocaleString():'—'}</td>
-      <td style="padding:8px 12px;border:1px solid #e2e8f0;text-align:right;font-weight:700;color:#1B3F6B">PKR ${g.payable.toLocaleString()}</td>
+  const itemRows = grouped.map(g=>`
+    <tr>
+      <td style="font-weight:600">${g.proc}${g.teeth?` <span style="color:#9aa5b1;font-weight:400">· Tooth ${g.teeth}</span>`:''}</td>
+      <td class="doc-num">PKR ${Math.round(g.unitPrice).toLocaleString()}</td>
+      <td class="doc-center">${g.qty}</td>
+      <td class="doc-num">PKR ${g.totalCost.toLocaleString()}</td>
+      <td class="doc-num${g.discount>0?' neg':''}">${g.discount>0?'−'+g.discount.toLocaleString():'—'}</td>
+      <td class="doc-num" style="font-weight:700;color:#1B3F6B">PKR ${g.payable.toLocaleString()}</td>
     </tr>`).join('');
 
   // Simple payment log: when money actually came in, separate from the
   // procedure breakdown above so neither table gets cluttered.
-  const txRows = payments.map((pay,i)=>`<tr style="background:${i%2===0?'#f8fafc':'#fff'}"><td style="padding:7px 12px;border:1px solid #e2e8f0">${pay.date}</td><td style="padding:7px 12px;border:1px solid #e2e8f0">${pay.method}</td><td style="padding:7px 12px;border:1px solid #e2e8f0">${pay.note||'—'}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;text-align:right;color:#38a169;font-weight:600">PKR ${(parseFloat(pay.paid)||0).toLocaleString()}</td></tr>`).join('');
+  const txRows = payments.map(pay=>`<tr><td>${pay.date}</td><td>${pay.method}</td><td>${pay.note||'—'}</td><td class="doc-num" style="color:#38a169;font-weight:600">PKR ${(parseFloat(pay.paid)||0).toLocaleString()}</td></tr>`).join('');
 
-  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Receipt - ${name}</title>
-  <style>body{font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:30px;color:#1a2332}.header{text-align:center;border-bottom:3px solid #1B3F6B;padding-bottom:16px;margin-bottom:20px}.logo{font-size:22px;font-weight:700;color:#1B3F6B}.sub{font-size:11px;color:#6b7a8d;margin-top:3px}.secTitle{font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#1B3F6B;margin:18px 0 8px}table{width:100%;border-collapse:collapse;margin-bottom:6px}th{background:#1B3F6B;color:#fff;padding:8px 12px;text-align:left;font-size:11px}.summary{background:#f8fafc;border-radius:8px;padding:14px;margin-top:14px}.footer{text-align:center;font-size:10px;color:#6b7a8d;margin-top:20px;border-top:1px solid #e2e8f0;padding-top:14px}</style>
-  </head><body>
-  ${pdfHeaderHTML('PAYMENT RECEIPT', true)}
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-    <div style="background:#f8fafc;border-radius:8px;padding:10px"><div style="font-size:10px;color:#6b7a8d;font-weight:700;text-transform:uppercase">Patient</div><div style="font-size:14px;font-weight:600">${name}</div></div>
-    <div style="background:#f8fafc;border-radius:8px;padding:10px"><div style="font-size:10px;color:#6b7a8d;font-weight:700;text-transform:uppercase">MR Number</div><div style="font-size:14px;font-weight:600">${getMR(p)}</div></div>
-    <div style="background:#f8fafc;border-radius:8px;padding:10px"><div style="font-size:10px;color:#6b7a8d;font-weight:700;text-transform:uppercase">Date</div><div style="font-size:14px;font-weight:600">${today}</div></div>
-    <div style="background:#f8fafc;border-radius:8px;padding:10px"><div style="font-size:10px;color:#6b7a8d;font-weight:700;text-transform:uppercase">Doctor</div><div style="font-size:14px;font-weight:600">${f(p,'Treating Doctor')||'Dr. Abdullah Karamat'}</div></div>
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Invoice - ${name}</title>
+  <style>${PDF_DOC_STYLE}</style></head><body>
+  ${pdfHeaderHTML('Invoice', true, pdfDocId('INV', mr))}
+  <div class="doc-parties">
+    <div>
+      <div class="doc-party-label">Billed To</div>
+      <div class="doc-party-name">${name}</div>
+      <div class="doc-party-sub">MR: ${getMR(p)}${phone?'<br>'+phone:''}</div>
+    </div>
+    <div style="text-align:right">
+      <div class="doc-party-label">Details</div>
+      <div class="doc-party-sub"><b>Date:</b> ${today}<br><b>Treating Doctor:</b> ${f(p,'Treating Doctor')||'Dr. Abdullah Karamat'}</div>
+    </div>
   </div>
-  ${grouped.length?`<div class="secTitle">Procedures</div><table><thead><tr><th>Procedure</th><th style="text-align:center">Unit Price</th><th style="text-align:center">Qty</th><th style="text-align:right">Amount</th><th style="text-align:right">Discount</th><th style="text-align:right">Payable</th></tr></thead><tbody>${itemRows}</tbody></table>`:''}
-  ${payments.length?`<div class="secTitle">Payment Log</div><table><thead><tr><th>Date</th><th>Method</th><th>Note</th><th style="text-align:right">Amount Paid</th></tr></thead><tbody>${txRows}</tbody></table>`:''}
-  <div class="summary">
-    <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Total Charged:</span><span style="font-weight:600">PKR ${total_charged.toLocaleString()}</span></div>
-    ${total_discount>0?`<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Total Discount:</span><span style="font-weight:600;color:#e53e3e">−PKR ${total_discount.toLocaleString()}</span></div>`:''}
-    <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Total Paid:</span><span style="font-weight:600;color:#38a169">PKR ${total_paid.toLocaleString()}</span></div>
-    <div style="display:flex;justify-content:space-between;border-top:1px solid #e2e8f0;padding-top:8px;margin-top:4px"><span style="font-weight:700;font-size:14px">Amount Payable / Balance Due:</span><span style="font-weight:700;font-size:18px;color:${balance>0?'#e53e3e':'#38a169'}">PKR ${balance.toLocaleString()}</span></div>
+  ${grouped.length?`<div class="doc-section-label">Procedures</div><table class="doc-table"><thead><tr><th>Procedure</th><th class="doc-num">Unit Price</th><th class="doc-center">Qty</th><th class="doc-num">Amount</th><th class="doc-num">Discount</th><th class="doc-num">Payable</th></tr></thead><tbody>${itemRows}</tbody></table>`:''}
+  ${payments.length?`<div class="doc-section-label">Payment Log</div><table class="doc-table"><thead><tr><th>Date</th><th>Method</th><th>Note</th><th class="doc-num">Amount Paid</th></tr></thead><tbody>${txRows}</tbody></table>`:''}
+  <div class="doc-totals">
+    <div class="doc-totals-row"><span>Total Charged</span><span>PKR ${total_charged.toLocaleString()}</span></div>
+    ${total_discount>0?`<div class="doc-totals-row"><span>Total Discount</span><span class="neg">−PKR ${total_discount.toLocaleString()}</span></div>`:''}
+    <div class="doc-totals-row"><span>Total Paid</span><span style="color:#38a169">PKR ${total_paid.toLocaleString()}</span></div>
+    <div class="doc-totals-row grand"><span>${balance>0?'Balance Due':'Amount Payable'}</span><span class="amt${balance>0?' due':''}">PKR ${balance.toLocaleString()}</span></div>
   </div>
   ${pdfDoctorSignatureHTML()}
-  <div class="footer">Smile Hub Clinics · Johar Town, Lahore · Thank you for choosing us!</div>
+  <div class="doc-footer">Smile Hub Clinics · Johar Town, Lahore · Thank you for choosing us!</div>
   </body></html>`;
   const docTitle = `Receipt_${name.replace(/\s/g,'_')}_${getMR(p)}`;
   if (mode === 'view') { viewDocHTML(html, docTitle); }
@@ -3855,12 +3996,12 @@ function downloadPatientRecord(mr, mode) {
 
   const notesHTML = notes ? notes.split('\n').filter(Boolean).map(line=>{
     const i=line.indexOf(':');
-    return i>0?`<tr><td style="padding:7px 12px;border:1px solid #e2e8f0;color:#6b7a8d;font-weight:600;white-space:nowrap">${line.substring(0,i).trim()}</td><td style="padding:7px 12px;border:1px solid #e2e8f0">${line.substring(i+1).trim()}</td></tr>`:'';
-  }).join('') : '<tr><td colspan="2" style="padding:10px;text-align:center;color:#6b7a8d">No notes recorded</td></tr>';
+    return i>0?`<tr><td style="color:#6b7a8d;font-weight:600;white-space:nowrap">${line.substring(0,i).trim()}</td><td>${line.substring(i+1).trim()}</td></tr>`:'';
+  }).join('') : '<tr><td colspan="2" style="text-align:center;color:#9aa5b1">No notes recorded</td></tr>';
 
   const planGrouped = groupByProc(plan);
   const planHTML = planGrouped.length ? planGrouped.map(g=>{
-    return `<tr><td style="padding:7px 12px;border:1px solid #e2e8f0;font-weight:600">${g.proc}</td><td style="padding:7px 12px;border:1px solid #e2e8f0">${g.teeth||'—'}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;text-align:center">PKR ${Math.round(g.unitPrice).toLocaleString()}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;text-align:center">${g.qty}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;text-align:right;color:#e53e3e">${g.discount>0?'−'+g.discount.toLocaleString():'—'}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;text-align:right">PKR ${g.payable.toLocaleString()}</td></tr>`;}).join('') : '<tr><td colspan="6" style="padding:10px;text-align:center;color:#6b7a8d">No treatment plan</td></tr>';
+    return `<tr><td style="font-weight:600">${g.proc}</td><td>${g.teeth||'—'}</td><td class="doc-num">PKR ${Math.round(g.unitPrice).toLocaleString()}</td><td class="doc-center">${g.qty}</td><td class="doc-num${g.discount>0?' neg':''}">${g.discount>0?'−'+g.discount.toLocaleString():'—'}</td><td class="doc-num" style="font-weight:700">PKR ${g.payable.toLocaleString()}</td></tr>`;}).join('') : '<tr><td colspan="6" style="text-align:center;color:#9aa5b1">No treatment plan</td></tr>';
 
   const payAllItems = [];
   pays.forEach(pay => {
@@ -3869,58 +4010,43 @@ function downloadPatientRecord(mr, mode) {
   });
   const payGrouped = groupByProc(payAllItems);
   const payHTML = payGrouped.length ? payGrouped.map(g=>{
-    return `<tr><td style="padding:7px 12px;border:1px solid #e2e8f0;font-weight:600">${g.proc}${g.teeth?` <span style="color:#6b7a8d;font-weight:400">(Tooth ${g.teeth})</span>`:''}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;text-align:center">PKR ${Math.round(g.unitPrice).toLocaleString()}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;text-align:center">${g.qty}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;color:#e53e3e">${g.discount>0?'−'+g.discount.toLocaleString():'—'}</td><td style="padding:7px 12px;border:1px solid #e2e8f0;color:#38a169;font-weight:600">PKR ${g.payable.toLocaleString()}</td></tr>`;}).join('') : '<tr><td colspan="5" style="padding:10px;text-align:center;color:#6b7a8d">No payments recorded</td></tr>';
+    return `<tr><td style="font-weight:600">${g.proc}${g.teeth?` <span style="color:#9aa5b1;font-weight:400">· Tooth ${g.teeth}</span>`:''}</td><td class="doc-num">PKR ${Math.round(g.unitPrice).toLocaleString()}</td><td class="doc-center">${g.qty}</td><td class="doc-num${g.discount>0?' neg':''}">${g.discount>0?'−'+g.discount.toLocaleString():'—'}</td><td class="doc-num" style="color:#38a169;font-weight:600">PKR ${g.payable.toLocaleString()}</td></tr>`;}).join('') : '<tr><td colspan="5" style="text-align:center;color:#9aa5b1">No payments recorded</td></tr>';
 
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Patient Record - ${name}</title>
-  <style>body{font-family:Arial,sans-serif;max-width:750px;margin:0 auto;padding:30px;color:#1a2332;font-size:13px}
-  .hdr{text-align:center;border-bottom:3px solid #1B3F6B;padding-bottom:16px;margin-bottom:20px}
-  .logo{font-size:22px;font-weight:700;color:#1B3F6B}.sub{font-size:11px;color:#6b7a8d;margin-top:3px}
-  .sec{font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#1B3F6B;margin:20px 0 10px;border-bottom:2px solid #e2e8f0;padding-bottom:6px}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
-  .box{background:#f8fafc;border-radius:8px;padding:10px;border:1px solid #e2e8f0}
-  .lbl{font-size:10px;color:#6b7a8d;font-weight:700;text-transform:uppercase;margin-bottom:3px}
-  .val{font-size:14px;font-weight:600}
-  .alert{background:#fff5f5;border:1px solid #feb2b2;border-radius:8px;padding:12px;margin-bottom:12px;color:#c53030}
-  table{width:100%;border-collapse:collapse;margin-bottom:14px}
-  th{background:#1B3F6B;color:#fff;padding:8px 12px;text-align:left;font-size:11px}
-  .summary{background:#f8fafc;border-radius:8px;padding:12px;margin-bottom:16px}
-  .sig{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:40px}
-  .sigLine{border-top:1px solid #2d3748;padding-top:8px;font-size:11px;color:#6b7a8d;text-align:center}
-  .footer{text-align:center;font-size:10px;color:#6b7a8d;border-top:1px solid #e2e8f0;padding-top:14px;margin-top:20px}</style>
-  </head><body>
-  ${pdfHeaderHTML('COMPLETE PATIENT RECORD')}
+  <style>${PDF_DOC_STYLE}</style></head><body>
+  ${pdfHeaderHTML('Patient Record', true, pdfDocId('REC', mr))}
 
-  ${med?`<div class="alert">⚠️ <strong>Medical Alert:</strong> ${med}</div>`:''}
+  ${med?`<div class="doc-alert">⚠️ <strong>Medical Alert:</strong> ${med}</div>`:''}
 
-  <div class="sec">Patient Information</div>
-  <div class="grid">
-    <div class="box"><div class="lbl">Full Name</div><div class="val">${name}</div></div>
-    <div class="box"><div class="lbl">MR Number</div><div class="val">${getMR(p)}</div></div>
-    <div class="box"><div class="lbl">Gender</div><div class="val">${gen||'—'}</div></div>
-    <div class="box"><div class="lbl">Phone</div><div class="val">${phone||'—'}</div></div>
-    <div class="box"><div class="lbl">First Visit</div><div class="val">${visit||'—'}</div></div>
-    <div class="box"><div class="lbl">Treating Doctor</div><div class="val">${doc||'Dr. Abdullah Karamat'}</div></div>
-    <div class="box"><div class="lbl">Current Treatment</div><div class="val">${treat||'—'}</div></div>
-    <div class="box"><div class="lbl">Next Recall</div><div class="val">${next||'—'}</div></div>
+  <div class="doc-parties">
+    <div>
+      <div class="doc-party-label">Patient</div>
+      <div class="doc-party-name">${name}</div>
+      <div class="doc-party-sub">MR: ${getMR(p)} · ${gen||'—'}<br>${phone||'—'}</div>
+    </div>
+    <div style="text-align:right">
+      <div class="doc-party-label">Care Details</div>
+      <div class="doc-party-sub"><b>Treating Doctor:</b> ${doc||'Dr. Abdullah Karamat'}<br><b>First Visit:</b> ${visit||'—'} &nbsp; <b>Next Recall:</b> ${next||'—'}${treat?`<br><b>Current Treatment:</b> ${treat}`:''}</div>
+    </div>
   </div>
 
-  <div class="sec">Treatment History (Chronological)</div>
-  <table><thead><tr><th>Date</th><th>Procedure / Notes</th></tr></thead><tbody>${notesHTML}</tbody></table>
+  <div class="doc-section-label">Treatment History</div>
+  <table class="doc-table"><thead><tr><th>Date</th><th>Procedure / Notes</th></tr></thead><tbody>${notesHTML}</tbody></table>
 
-  <div class="sec">Treatment Plan</div>
-  <table><thead><tr><th>Procedure</th><th>Tooth</th><th style="text-align:center">Unit Price</th><th style="text-align:center">Qty</th><th style="text-align:right">Discount</th><th style="text-align:right">Payable</th></tr></thead><tbody>${planHTML}</tbody></table>
+  <div class="doc-section-label">Treatment Plan</div>
+  <table class="doc-table"><thead><tr><th>Procedure</th><th>Tooth</th><th class="doc-num">Unit Price</th><th class="doc-center">Qty</th><th class="doc-num">Discount</th><th class="doc-num">Payable</th></tr></thead><tbody>${planHTML}</tbody></table>
 
-  <div class="sec">Payment History</div>
-  <table><thead><tr><th>Procedure</th><th style="text-align:center">Unit Price</th><th style="text-align:center">Qty</th><th>Discount</th><th>Paid</th></tr></thead><tbody>${payHTML}</tbody></table>
-  ${pays.length?`<div class="summary">
-    <div style="display:flex;justify-content:space-between;margin-bottom:5px"><span>Total Charged:</span><span style="font-weight:600">PKR ${total_charged.toLocaleString()}</span></div>
-    ${total_pay_discount>0?`<div style="display:flex;justify-content:space-between;margin-bottom:5px"><span>Total Discount:</span><span style="font-weight:600;color:#e53e3e">−PKR ${total_pay_discount.toLocaleString()}</span></div>`:''}
-    <div style="display:flex;justify-content:space-between;margin-bottom:5px"><span>Total Paid:</span><span style="font-weight:600;color:#38a169">PKR ${total_paid.toLocaleString()}</span></div>
-    <div style="display:flex;justify-content:space-between;border-top:1px solid #e2e8f0;padding-top:8px"><span style="font-weight:700;font-size:14px">Amount Payable / Balance Due:</span><span style="font-weight:700;font-size:18px;color:${balance>0?'#e53e3e':'#38a169'}">PKR ${balance.toLocaleString()}</span></div>
+  <div class="doc-section-label">Payment History</div>
+  <table class="doc-table"><thead><tr><th>Procedure</th><th class="doc-num">Unit Price</th><th class="doc-center">Qty</th><th class="doc-num">Discount</th><th class="doc-num">Paid</th></tr></thead><tbody>${payHTML}</tbody></table>
+  ${pays.length?`<div class="doc-totals">
+    <div class="doc-totals-row"><span>Total Charged</span><span>PKR ${total_charged.toLocaleString()}</span></div>
+    ${total_pay_discount>0?`<div class="doc-totals-row"><span>Total Discount</span><span class="neg">−PKR ${total_pay_discount.toLocaleString()}</span></div>`:''}
+    <div class="doc-totals-row"><span>Total Paid</span><span style="color:#38a169">PKR ${total_paid.toLocaleString()}</span></div>
+    <div class="doc-totals-row grand"><span>${balance>0?'Balance Due':'Amount Payable'}</span><span class="amt${balance>0?' due':''}">PKR ${balance.toLocaleString()}</span></div>
   </div>`:''}
 
   ${pdfSignatureHTML()}
-  <div class="footer">Record generated: ${today} · Smile Hub Clinics · Johar Town, Lahore · Confidential Medical Record</div>
+  <div class="doc-footer">Record generated ${today} · Smile Hub Clinics · Johar Town, Lahore · Confidential Medical Record</div>
   </body></html>`;
 
   const docTitle = `PatientRecord_${name.replace(/\s/g,'_')}_${getMR(p)}`;
