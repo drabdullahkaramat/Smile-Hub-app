@@ -404,10 +404,19 @@ html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;pos
       <div id="apptList"></div>
     </div>
     <div id="timetableView" style="display:none">
-      <input class="fI" type="date" id="ttDate" onchange="renderTimetable()" style="margin-bottom:10px">
-      <div style="font-size:10px;color:var(--muted);margin-bottom:8px">Tap a free slot to start booking it</div>
+      <div class="fRow" id="ttDocSel">
+        <div class="chip on" onclick="setTtDoctor('Dr. Abdullah',this)">Dr. Abdullah</div>
+        <div class="chip" onclick="setTtDoctor('Dr. Athar',this)">Dr. Athar</div>
+        <div class="chip" onclick="setTtDoctor('Dr. Hussain',this)">Dr. Hussain</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <button onclick="ttShiftWeek(-1)" style="width:34px;height:34px;flex-shrink:0;border-radius:9px;border:1.5px solid var(--border);background:#fff;font-size:15px;cursor:pointer;color:var(--navy)">‹</button>
+        <div id="ttWeekLabel" style="flex:1;text-align:center;font-size:12px;font-weight:700;color:var(--navy)"></div>
+        <button onclick="ttShiftWeek(1)" style="width:34px;height:34px;flex-shrink:0;border-radius:9px;border:1.5px solid var(--border);background:#fff;font-size:15px;cursor:pointer;color:var(--navy)">›</button>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-bottom:8px">Tap a free slot to book it, or a booked slot to view/edit</div>
       <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
-        <div id="ttGrid" style="min-width:520px"></div>
+        <div id="ttGrid" style="min-width:640px"></div>
       </div>
     </div>
   </div>
@@ -3122,40 +3131,50 @@ async function botConfirmYes() {
   const action = botPendingAction;
   botPendingAction = null;
 
-  if (action.type === 'book') {
-    const start = new Date(action.dateStr + 'T' + action.timeHHMM + ':00');
-    const end = new Date(start.getTime() + 45*60000);
-    const title = '[' + action.doctor + '] ' + action.name + ' - Appointment';
-    const ok = await addCalEvent(title, start.toISOString(), end.toISOString(), 'Booked via Assistant', action.doctor);
-    if (ok && !action.existing) {
-      const mrNums = PATIENTS.map(function(p){return parseInt((getMR(p)||'SH-0000').replace('SH-',''))||0;});
-      const nextMR = 'SH-' + String(Math.max(0,...mrNums)+1).padStart(4,'0');
-      const row = [action.dateStr, action.name, nextMR, '', '', '', '', action.doctor, '', '', '', '', '', '', 'Active', ''];
-      await writeSheet({action:'append', row: JSON.stringify(row)});
+  try {
+    if (action.type === 'book') {
+      const start = new Date(action.dateStr + 'T' + action.timeHHMM + ':00');
+      const end = new Date(start.getTime() + 45*60000);
+      const title = '[' + action.doctor + '] ' + action.name + ' - Appointment';
+      const ok = await addCalEvent(title, start.toISOString(), end.toISOString(), 'Booked via Assistant', action.doctor);
+      if (ok && !action.existing) {
+        const mrNums = PATIENTS.map(function(p){return parseInt((getMR(p)||'SH-0000').replace('SH-',''))||0;});
+        const nextMR = 'SH-' + String(Math.max(0,...mrNums)+1).padStart(4,'0');
+        const row = [action.dateStr, action.name, nextMR, '', '', '', '', action.doctor, '', '', '', '', '', '', 'Active', ''];
+        try {
+          const appendUrl = `${SCRIPT_URL}?action=append&row=${encodeURIComponent(JSON.stringify(row))}`;
+          const r = await fetch(appendUrl);
+          const d = await r.json();
+          if (!d.success) console.warn('Sheet append failed:', d.error);
+        } catch(e) { console.error('Sheet append error:', e); }
+      }
+      addBotMessage('bot', ok ? 'Booked ' + action.name + ' with ' + action.doctor + ' — ' + botDateLabel(action.dateStr) + '.' : 'Could not book — please try from the booking form.');
+      if (ok) await initApp();
     }
-    addBotMessage('bot', ok ? 'Booked ' + action.name + ' with ' + action.doctor + ' — ' + botDateLabel(action.dateStr) + '.' : 'Could not book — please try from the booking form.');
-    if (ok) await initApp();
-  }
-  else if (action.type === 'payment') {
-    const mr = getMR(action.patient);
-    if (!PAYMENTS[mr]) PAYMENTS[mr] = [];
-    PAYMENTS[mr].push({ proc: action.proc||'General', charged: action.amount, paid: action.amount, method:'Cash', note:'Logged via Assistant', date: new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) });
-    localStorage.setItem('smilehub_payments', JSON.stringify(PAYMENTS));
-    syncSheetField(mr, 'Payments JSON', JSON.stringify(PAYMENTS[mr]));
-    updateRevenueStats();
-    addBotMessage('bot', 'Logged PKR ' + action.amount.toLocaleString() + ' payment for ' + f(action.patient,'Patient Name') + '.');
-  }
-  else if (action.type === 'inventory') {
-    if (action.existingIdx !== null) {
-      const item = INVENTORY[action.existingIdx];
-      item.qty = Math.max(0, (parseFloat(item.qty)||0) + action.delta);
-    } else {
-      INVENTORY.push({ name: action.itemName, qty: Math.max(0,action.delta), unit:'', threshold:'' });
+    else if (action.type === 'payment') {
+      const mr = getMR(action.patient);
+      if (!PAYMENTS[mr]) PAYMENTS[mr] = [];
+      PAYMENTS[mr].push({ proc: action.proc||'General', charged: action.amount, paid: action.amount, method:'Cash', note:'Logged via Assistant', date: new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) });
+      localStorage.setItem('smilehub_payments', JSON.stringify(PAYMENTS));
+      syncSheetField(mr, 'Payments JSON', JSON.stringify(PAYMENTS[mr]));
+      updateRevenueStats();
+      addBotMessage('bot', 'Logged PKR ' + action.amount.toLocaleString() + ' payment for ' + f(action.patient,'Patient Name') + '.');
     }
-    localStorage.setItem('smilehub_inventory', JSON.stringify(INVENTORY));
-    syncSheetField('CLINIC_SETTINGS', 'Inventory JSON', JSON.stringify(INVENTORY));
-    renderInventory();
-    addBotMessage('bot', 'Updated ' + action.itemName + '.');
+    else if (action.type === 'inventory') {
+      if (action.existingIdx !== null) {
+        const item = INVENTORY[action.existingIdx];
+        item.qty = Math.max(0, (parseFloat(item.qty)||0) + action.delta);
+      } else {
+        INVENTORY.push({ name: action.itemName, qty: Math.max(0,action.delta), unit:'', threshold:'' });
+      }
+      localStorage.setItem('smilehub_inventory', JSON.stringify(INVENTORY));
+      syncSheetField('CLINIC_SETTINGS', 'Inventory JSON', JSON.stringify(INVENTORY));
+      renderInventory();
+      addBotMessage('bot', 'Updated ' + action.itemName + '.');
+    }
+  } catch(err) {
+    console.error('botConfirmYes error:', err);
+    addBotMessage('bot', '⚠ Something went wrong saving that: ' + err.message + '. Please try again or use the regular form.');
   }
 }
 
@@ -4069,6 +4088,8 @@ function fApptDoc(doc, el) {
 // DOCTOR TIMETABLE VIEW
 // ═══════════════════════════════════════
 const TIMETABLE_DOCTORS = ['Dr. Abdullah', 'Dr. Athar', 'Dr. Hussain'];
+let ttDoctor = 'Dr. Abdullah';
+let ttWeekStart = null; // Monday of the currently viewed week
 
 function parseDoctorFromTitle(summary) {
   const m = (summary||'').match(/^\[(.*?)\]/);
@@ -4080,84 +4101,111 @@ function setScheduleView(view, el) {
   el.classList.add('on');
   document.getElementById('listView').style.display = view==='list' ? 'block' : 'none';
   document.getElementById('timetableView').style.display = view==='timetable' ? 'block' : 'none';
-  if (view === 'timetable') {
-    const dateEl = document.getElementById('ttDate');
-    if (!dateEl.value) dateEl.value = new Date().toISOString().split('T')[0];
-    renderTimetable();
-  }
+  if (view === 'timetable') renderTimetable();
+}
+
+function setTtDoctor(doc, el) {
+  ttDoctor = doc;
+  document.querySelectorAll('#ttDocSel .chip').forEach(c=>c.classList.remove('on'));
+  el.classList.add('on');
+  renderTimetable();
+}
+
+function ttGetWeekStart(d) {
+  const day = d.getDay(); // 0=Sun..6=Sat
+  const diff = day === 0 ? -6 : 1 - day; // shift back to Monday
+  const monday = new Date(d.getTime());
+  monday.setDate(monday.getDate() + diff);
+  monday.setHours(0,0,0,0);
+  return monday;
+}
+
+function ttShiftWeek(delta) {
+  if (!ttWeekStart) ttWeekStart = ttGetWeekStart(new Date());
+  ttWeekStart.setDate(ttWeekStart.getDate() + delta*7);
+  renderTimetable();
 }
 
 function renderTimetable() {
-  const dateStr = document.getElementById('ttDate').value;
   const grid = document.getElementById('ttGrid');
-  if (!dateStr || !grid) return;
+  if (!grid) return;
+  if (!ttWeekStart) ttWeekStart = ttGetWeekStart(new Date());
 
-  // Build a lookup: doctor -> [{timeHHMM, patient, evId, calId}]
-  const dayEvents = ALL_EVENTS.filter(ev => {
-    const sISO = ev.start?.dateTime || ev.start?.date;
-    if (!sISO) return false;
-    return sISO.split('T')[0] === dateStr;
-  });
+  const days = [];
+  for (let i=0;i<7;i++) {
+    const d = new Date(ttWeekStart.getTime());
+    d.setDate(d.getDate()+i);
+    days.push(d);
+  }
+  const dstr = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  const todayStr = dstr(new Date());
 
-  const byDoc = {};
-  TIMETABLE_DOCTORS.forEach(d => byDoc[d] = {});
-  dayEvents.forEach(ev => {
-    const doc = parseDoctorFromTitle(ev.summary);
-    if (!byDoc[doc]) return; // skip doctors not shown as a column (e.g. Dr. Asim)
-    const sISO = ev.start?.dateTime;
+  const wl = document.getElementById('ttWeekLabel');
+  if (wl) wl.textContent = days[0].toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) + ' – ' + days[6].toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+
+  // Build lookup: dateStr -> { "HH:MM" -> slot info }
+  const byDate = {};
+  days.forEach(d => byDate[dstr(d)] = {});
+
+  ALL_EVENTS.forEach(ev => {
+    const sISO = ev.start && ev.start.dateTime;
     if (!sISO) return;
+    const evDateStr = sISO.split('T')[0];
+    if (!byDate[evDateStr]) return; // outside this week
+    if (parseDoctorFromTitle(ev.summary) !== ttDoctor) return;
+
     const d = new Date(sISO);
-    const hhmm = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
-    const durMin = ev.end?.dateTime ? Math.round((new Date(ev.end.dateTime) - d) / 60000) : 45;
+    const durMin = ev.end && ev.end.dateTime ? Math.round((new Date(ev.end.dateTime) - d) / 60000) : 45;
     const pName = (ev.summary||'').split(' - ')[0].replace(/\[.*?\]/g,'').replace(/\?\?/g,'').trim();
-    // mark every 30-min slot this appointment overlaps as occupied
+    const treat = (ev.summary||'').split(' - ').slice(1).join(' - ');
     const startMin = d.getHours()*60 + d.getMinutes();
     for (let m = startMin; m < startMin + durMin; m += 30) {
-      const slotH = Math.floor(m/60), slotM = m - slotH*60 >= 30 ? 30 : 0;
+      const slotH = Math.floor(m/60), slotM = (m - slotH*60) >= 30 ? 30 : 0;
       const key = String(slotH).padStart(2,'0') + ':' + String(slotM).padStart(2,'0');
-      byDoc[doc][key] = { patient: pName, first: (m === startMin) };
+      byDate[evDateStr][key] = {
+        patient: pName, treat: treat, first: (m === startMin),
+        evId: ev.id || '', calId: ev._calId || 'primary', startISO: sISO
+      };
     }
   });
 
-  // Build the row list: Morning 10:00-14:00, Evening 18:00-21:00, 30-min steps
+  const periods = clinicHoursForDoctor(ttDoctor);
   const rows = [];
-  for (let m = 10*60; m < 14*60; m += 30) rows.push(m);
-  for (let m = 18*60; m < 21*60; m += 30) rows.push(m);
+  periods.forEach(period => { for (let m = period.start; m < period.end; m += 30) rows.push(m); });
 
   const fmtRow = m => {
     const h = Math.floor(m/60), mn = m%60, h12 = h%12||12, ap = h>=12?'PM':'AM';
     return h12 + ':' + String(mn).padStart(2,'0') + ' ' + ap;
   };
 
-  let html = '<div style="display:grid;grid-template-columns:70px repeat(' + TIMETABLE_DOCTORS.length + ',1fr);gap:1px;background:var(--border);border-radius:10px;overflow:hidden;font-size:11px">';
-  // Header row
-  html += '<div style="background:var(--navy);color:#fff;padding:7px 4px;font-weight:700;text-align:center">Time</div>';
-  TIMETABLE_DOCTORS.forEach(d => {
-    html += '<div style="background:var(--navy);color:#fff;padding:7px 4px;font-weight:700;text-align:center">' + d.replace('Dr. ','') + '</div>';
+  let html = '<div style="display:grid;grid-template-columns:60px repeat(7,1fr);gap:1px;background:var(--border);border-radius:10px;overflow:hidden;font-size:10.5px">';
+  html += '<div style="background:var(--navy);color:#fff;padding:6px 2px;font-weight:700;text-align:center">Time</div>';
+  days.forEach(d => {
+    const isToday = dstr(d) === todayStr;
+    html += '<div style="background:' + (isToday?'var(--teal-d)':'var(--navy)') + ';color:#fff;padding:5px 2px;font-weight:700;text-align:center;line-height:1.3">' + d.toLocaleDateString('en-GB',{weekday:'short'}) + '<br><span style="font-size:9px;font-weight:400;opacity:.85">' + d.getDate() + '</span></div>';
   });
 
-  let prevWasEvening = false;
+  let prevRowEnd = null;
   rows.forEach(m => {
-    if (m === 18*60) {
-      html += '<div style="grid-column:1/-1;background:var(--bg);padding:3px;text-align:center;font-size:9px;color:var(--muted);font-weight:700">EVENING</div>';
+    if (prevRowEnd !== null && m !== prevRowEnd) {
+      html += '<div style="grid-column:1/-1;background:var(--bg);padding:2px"></div>';
     }
+    html += '<div style="background:#fff;padding:5px 2px;text-align:center;color:var(--muted);font-weight:600">' + fmtRow(m) + '</div>';
     const h = Math.floor(m/60), mn = m%60;
     const hhmm = String(h).padStart(2,'0') + ':' + String(mn).padStart(2,'0');
-    html += '<div style="background:#fff;padding:6px 4px;text-align:center;color:var(--muted);font-weight:600">' + fmtRow(m) + '</div>';
-    TIMETABLE_DOCTORS.forEach(doc => {
-      const periods = clinicHoursForDoctor(doc);
-      const inHours = periods.some(p => m >= p.start && m < p.end);
-      if (!inHours) {
-        html += '<div style="background:#f7f7f7;padding:6px 4px;text-align:center;color:#ccc">—</div>';
-        return;
-      }
-      const slot = byDoc[doc][hhmm];
+    days.forEach(d => {
+      const ds = dstr(d);
+      const slot = byDate[ds][hhmm];
       if (slot) {
-        html += '<div style="background:rgba(27,63,107,.08);padding:6px 3px;text-align:center;color:var(--navy);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + slot.patient.replace(/"/g,'') + '">' + (slot.first ? slot.patient : '·') + '</div>';
+        const titleAttr = (slot.patient + (slot.treat?' - '+slot.treat:'')).replace(/"/g,'');
+        const safeName = slot.patient.replace(/'/g,'');
+        const safeTreat = (slot.treat||'').replace(/'/g,'');
+        html += '<div style="background:rgba(27,63,107,.08);padding:5px 2px;text-align:center;color:var(--navy);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="' + titleAttr + '" onclick="openEditAppt(\'' + slot.evId + '\',\'' + safeName + '\',\'' + slot.startISO + '\',\'' + safeTreat + '\',\'' + slot.calId + '\')">' + (slot.first ? slot.patient : '·') + '</div>';
       } else {
-        html += '<div style="background:rgba(75,191,176,.08);padding:6px 3px;text-align:center;color:var(--td);font-weight:600;cursor:pointer" onclick="quickBookSlot(\'' + dateStr + '\',\'' + doc + '\',\'' + hhmm + '\')">Free</div>';
+        html += '<div style="background:rgba(75,191,176,.08);padding:5px 2px;text-align:center;color:var(--td);font-weight:600;cursor:pointer" onclick="quickBookSlot(\'' + ds + '\',\'' + ttDoctor + '\',\'' + hhmm + '\')">Free</div>';
       }
     });
+    prevRowEnd = m + 30;
   });
   html += '</div>';
   grid.innerHTML = html;
