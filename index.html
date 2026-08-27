@@ -367,14 +367,18 @@ html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;pos
       <div class="statC" onclick="go('recalls')"><div class="statN cR" id="stR">—</div><div class="statL">Recalls</div></div>
       <div class="statC" onclick="go('patients')"><div class="statN cT" id="stP">—</div><div class="statL">Patients</div></div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px">
-      <div class="statC" onclick="go('balances')" style="text-align:left;padding:12px 14px">
-        <div style="font-size:10px;color:var(--muted);font-weight:600;margin-bottom:3px">TODAY'S REVENUE</div>
-        <div class="statN cT" id="stRev" style="font-size:18px">PKR 0</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:4px">
+      <div class="statC" onclick="go('balances')" style="text-align:left;padding:10px 8px">
+        <div style="font-size:9px;color:var(--muted);font-weight:600;margin-bottom:3px">TODAY</div>
+        <div class="statN cT" id="stRev" style="font-size:14px">PKR 0</div>
       </div>
-      <div class="statC" onclick="go('balances')" style="text-align:left;padding:12px 14px">
-        <div style="font-size:10px;color:var(--muted);font-weight:600;margin-bottom:3px">OUTSTANDING</div>
-        <div class="statN cR" id="stBal" style="font-size:18px">PKR 0</div>
+      <div class="statC" onclick="go('balances')" style="text-align:left;padding:10px 8px">
+        <div style="font-size:9px;color:var(--muted);font-weight:600;margin-bottom:3px">THIS MONTH</div>
+        <div class="statN cT" id="stRevMonth" style="font-size:14px">PKR 0</div>
+      </div>
+      <div class="statC" onclick="go('balances')" style="text-align:left;padding:10px 8px">
+        <div style="font-size:9px;color:var(--muted);font-weight:600;margin-bottom:3px">OUTSTANDING</div>
+        <div class="statN cR" id="stBal" style="font-size:14px">PKR 0</div>
       </div>
     </div>
     <div class="sec" style="margin-top:18px">Today's Schedule</div>
@@ -574,14 +578,64 @@ html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;pos
   </div>
 </div>
 
+<!-- SET RECALL MODAL -->
+<div class="ov" id="recallModal">
+  <div class="sh">
+    <div class="handle"></div>
+    <div class="shT">Set Next Recall</div>
+    <div class="fG"><label class="fL">Exact Date</label><input class="fI" type="date" id="recallDate" onchange="document.getElementById('recallDuration').value=''"></div>
+    <div style="text-align:center;font-size:11px;color:var(--muted);margin:8px 0">— or pick a duration from today —</div>
+    <div class="fG"><label class="fL">Recall In</label>
+      <select class="fS" id="recallDuration" onchange="applyRecallDuration()">
+        <option value="">Select duration</option>
+        <option value="1">1 Month</option>
+        <option value="3">3 Months</option>
+        <option value="6">6 Months</option>
+        <option value="12">1 Year</option>
+      </select>
+    </div>
+    <div style="font-size:10px;color:var(--muted);margin-bottom:10px">If nothing is picked, this defaults to 6 months from today.</div>
+    <button class="btnP" onclick="saveRecall()">💾 Save Recall Date</button>
+    <button class="btnS" onclick="closeRecallModal()">Cancel</button>
+  </div>
+</div>
+
 <!-- ADD NOTE MODAL -->
 <div class="ov" id="noteModal">
   <div class="sh">
     <div class="handle"></div>
-    <div class="shT">Add Procedural Note</div>
-    <div class="fG"><label class="fL">Date</label><input class="fI" id="noteDate" placeholder="e.g. 06-Jun"></div>
-    <div class="fG"><label class="fL">Note</label><textarea class="fI" id="noteText" rows="3" placeholder="Procedure. Findings. Next plan." style="resize:none"></textarea></div>
-    <button class="btnP" onclick="saveNote()">💾 Save Note</button>
+    <div class="shT">Add Procedure Record</div>
+    <div class="fG"><label class="fL">Date</label><input class="fI" type="date" id="noteDate"></div>
+    <div class="fG"><label class="fL">Procedure</label>
+      <select class="fS" id="noteProc">
+        <option value="">Select procedure (optional)</option>
+      </select>
+    </div>
+    <div class="fG"><label class="fL">Notes</label><textarea class="fI" id="noteText" rows="3" placeholder="Findings. Next plan." style="resize:none"></textarea></div>
+
+    <div style="display:flex;align-items:center;gap:8px;margin:14px 0 10px;padding-top:12px;border-top:1px solid var(--border)">
+      <input type="checkbox" id="notePayToggle" onchange="document.getElementById('notePaySection').style.display=this.checked?'block':'none'" style="width:18px;height:18px">
+      <label for="notePayToggle" style="font-size:13px;font-weight:600;color:var(--navy)">💰 Record a payment for this visit</label>
+    </div>
+    <div id="notePaySection" style="display:none">
+      <div class="fR">
+        <div class="fG"><label class="fL">Charged (PKR)</label><input class="fI" type="number" id="notePayCharged" placeholder="0"></div>
+        <div class="fG"><label class="fL">Paid (PKR)</label><input class="fI" type="number" id="notePayPaid" placeholder="0"></div>
+      </div>
+      <div class="fG"><label class="fL">Discount (PKR)</label>
+        <div style="display:flex;align-items:center;gap:6px">
+          <button type="button" onclick="adjustDiscount('notePay',-1000)" style="width:34px;height:38px;flex-shrink:0;border-radius:9px;border:1.5px solid var(--border);background:#fff;font-size:15px;font-weight:700;color:var(--navy);cursor:pointer">−</button>
+          <input class="fI" type="number" id="notePayDiscount" value="0" style="text-align:center;padding-left:4px;padding-right:4px">
+          <button type="button" onclick="adjustDiscount('notePay',1000)" style="width:34px;height:38px;flex-shrink:0;border-radius:9px;border:1.5px solid var(--border);background:#fff;font-size:15px;font-weight:700;color:var(--navy);cursor:pointer">+</button>
+        </div>
+      </div>
+      <div class="fG"><label class="fL">Payment Method</label>
+        <select class="fS" id="notePayMethod"><option>Cash</option><option>Card</option><option>Bank Transfer</option><option>Cheque</option></select>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-bottom:6px">This is added to the patient's payment history and can be edited or removed from the Payments screen afterward.</div>
+    </div>
+
+    <button class="btnP" onclick="saveNote()">💾 Save</button>
     <button class="btnS" onclick="closeNote()">Cancel</button>
   </div>
 </div>
@@ -1555,7 +1609,12 @@ function fAppt(f,el) { apptF=f; document.querySelectorAll('#apptF .chip').forEac
 // ═══════════════════════════════════════
 function renderPats() {
   const el = document.getElementById('patList');
-  const active = PATIENTS.filter(p => (f(p,'Status')||'Active').toLowerCase() !== 'inactive' && f(p,'Status').toLowerCase() !== 'deleted');
+  const active = PATIENTS.filter(p => (f(p,'Status')||'Active').toLowerCase() !== 'inactive' && f(p,'Status').toLowerCase() !== 'deleted')
+    .sort((a,b) => {
+      const numA = parseInt((getMR(a)||'SH-0000').replace('SH-',''))||0;
+      const numB = parseInt((getMR(b)||'SH-0000').replace('SH-',''))||0;
+      return numB - numA; // newest (highest MR number) first
+    });
   if (!active.length) { el.innerHTML='<div class="empty"><div class="emIco">👥</div><div class="emTxt">No patients yet</div></div>'; return; }
   el.innerHTML = active.map(p => {
     const doc = f(p,'Treating Doctor');
@@ -1668,7 +1727,7 @@ function renderProfile(p) {
     <div class="iItem" onclick="openEdit('Gender','${gen}','${mr}')"><div class="iLbl">Gender</div><div class="iVal">${gen||'—'}</div><div class="editHint">✏ tap to edit</div></div>
     <div class="iItem" onclick="openEdit('Phone Number','${phone}','${mr}')"><div class="iLbl">Phone</div><div class="iVal" style="font-size:11px">${phone||'—'}</div><div class="editHint">✏ tap to edit</div></div>
     <div class="iItem" onclick="openEdit('Treating Doctor','${doc}','${mr}')"><div class="iLbl">Doctor</div><div class="iVal" style="font-size:11px">${doc||'—'}</div><div class="editHint">✏ tap to edit</div></div>
-    <div class="iItem" onclick="openEdit('Next Appointment','${next}','${mr}')"><div class="iLbl">Next Recall</div><div class="iVal" style="font-size:11px">${next||'—'}</div><div class="editHint">✏ tap to edit</div></div>
+    <div class="iItem" onclick="openRecallModal('${mr}','${next}')"><div class="iLbl">Next Recall</div><div class="iVal" style="font-size:11px">${next||'—'}</div><div class="editHint">📅 tap to set</div></div>
     <div class="iItem" onclick="openEdit('Referred By','${ref}','${mr}')"><div class="iLbl">Referred By</div><div class="iVal" style="font-size:11px">${ref||'—'}</div><div class="editHint">✏ tap to edit</div></div>
     <div class="iItem" onclick="openEdit('Medical History / Alerts','${med}','${mr}')"><div class="iLbl">⚠ Medical</div><div class="iVal" style="font-size:11px">${med||'—'}</div><div class="editHint">✏ tap to edit</div></div>
     <div class="iItem" onclick="openEdit('Balance (PKR)','${bal}','${mr}')"><div class="iLbl">Balance PKR</div><div class="iVal">${parseFloat(bal)||0}</div><div class="editHint">✏ tap to edit</div></div>
@@ -1859,6 +1918,52 @@ function openEdit(field, value, mr) {
   setTimeout(()=>document.getElementById('editV').focus(),200);
 }
 
+let curRecallMR = null;
+function openRecallModal(mr, currentValue) {
+  curRecallMR = mr;
+  document.getElementById('recallDate').value = '';
+  document.getElementById('recallDuration').value = '';
+  const d = currentValue ? new Date(currentValue) : null;
+  if (d && !isNaN(d.getTime())) {
+    document.getElementById('recallDate').value = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  }
+  document.getElementById('recallModal').classList.add('open');
+}
+function closeRecallModal(){document.getElementById('recallModal').classList.remove('open');}
+
+function applyRecallDuration() {
+  const months = parseInt(document.getElementById('recallDuration').value);
+  if (!months) return;
+  const d = new Date();
+  d.setMonth(d.getMonth()+months);
+  document.getElementById('recallDate').value = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+async function saveRecall() {
+  let dateVal = document.getElementById('recallDate').value;
+  if (!dateVal) {
+    // Nothing picked at all — default to a 6-month recall.
+    const d = new Date();
+    d.setMonth(d.getMonth()+6);
+    dateVal = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  }
+  const dateLabel = new Date(dateVal+'T12:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+  const p = PATIENTS.find(x=>getMR(x)===curRecallMR);
+  if (p) p['Next Appointment'] = dateLabel;
+  closeRecallModal();
+  renderPats();
+  refreshProfile(curRecallMR);
+  renderRc();
+  try {
+    const url = `${SCRIPT_URL}?action=update&mr=${encodeURIComponent(curRecallMR)}&field=${encodeURIComponent('Next Appointment')}&value=${encodeURIComponent(dateLabel)}`;
+    const r = await fetch(url);
+    const d = await r.json();
+    if (!d.success) console.warn('Recall save failed:', d.error);
+  } catch(e) {
+    console.error('Recall save error:', e);
+  }
+}
+
 async function saveEdit() {
   const newVal = document.getElementById('editV').value.trim();
   const p = PATIENTS.find(x=>getMR(x)===editMR);
@@ -1889,27 +1994,67 @@ function closeEdit(){document.getElementById('editModal').classList.remove('open
 // PROCEDURAL NOTES
 // ═══════════════════════════════════════
 let curNoteMR = null;
-function openNoteModal(mr) { curNoteMR=mr; document.getElementById('noteDate').value=''; document.getElementById('noteText').value=''; document.getElementById('noteModal').classList.add('open'); }
+function openNoteModal(mr) {
+  curNoteMR=mr;
+  document.getElementById('noteDate').value='';
+  document.getElementById('noteText').value='';
+  const sel=document.getElementById('noteProc');
+  sel.innerHTML='<option value="">Select procedure (optional)</option>'+PRICES.map(p=>`<option value="${p.name}">${p.name}</option>`).join('');
+  document.getElementById('notePayToggle').checked=false;
+  document.getElementById('notePaySection').style.display='none';
+  document.getElementById('notePayCharged').value='';
+  document.getElementById('notePayPaid').value='';
+  document.getElementById('notePayDiscount').value='0';
+  document.getElementById('notePayMethod').value='Cash';
+  document.getElementById('noteModal').classList.add('open');
+}
 function closeNote(){document.getElementById('noteModal').classList.remove('open');}
+
 async function saveNote() {
-  const date=document.getElementById('noteDate').value.trim();
+  const dateVal=document.getElementById('noteDate').value;
+  const proc=document.getElementById('noteProc').value;
   const text=document.getElementById('noteText').value.trim();
-  if(!date||!text){alert('Please enter date and note');return;}
+  if(!dateVal){alert('Please pick a date');return;}
+  if(!proc && !text){alert('Please select a procedure or enter a note');return;}
+
+  const dateLabel = new Date(dateVal+'T12:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short'});
   const p=PATIENTS.find(x=>getMR(x)===curNoteMR);
   let newNotes = '';
   if(p){
     const existing=f(p,'Procedural Notes');
-    newNotes=(existing?existing+'\n':'')+date+': '+text;
+    const line = dateLabel + ': ' + (proc?'['+proc+'] ':'') + text;
+    newNotes=(existing?existing+'\n':'')+line;
     p['Procedural Notes']=newNotes;
   }
+
+  // Optional payment for this visit — pushed into the same payment
+  // history as any other payment, so it is fully visible/editable from
+  // the Payments screen afterward.
+  const payOn = document.getElementById('notePayToggle').checked;
+  if (payOn) {
+    const charged = parseFloat(document.getElementById('notePayCharged').value)||0;
+    const paid = parseFloat(document.getElementById('notePayPaid').value)||0;
+    const discount = parseFloat(document.getElementById('notePayDiscount').value)||0;
+    const method = document.getElementById('notePayMethod').value;
+    if (charged || paid) {
+      if(!PAYMENTS[curNoteMR]) PAYMENTS[curNoteMR]=[];
+      const fullDate = new Date(dateVal+'T12:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+      PAYMENTS[curNoteMR].push({ proc: proc||'General', charged, paid, discount, method, note:'Recorded with procedure entry', date: fullDate });
+      localStorage.setItem('smilehub_payments', JSON.stringify(PAYMENTS));
+      syncSheetField(curNoteMR, 'Payments JSON', JSON.stringify(PAYMENTS[curNoteMR]));
+      updateRevenueStats();
+    }
+  }
+
   closeNote();
   refreshProfile(curNoteMR);
 
-  // Write back to sheet via GET (CORS-safe)
+  // Write notes back to sheet via GET (CORS-safe)
   try {
     const url = `${SCRIPT_URL}?action=update&mr=${encodeURIComponent(curNoteMR)}&field=${encodeURIComponent('Procedural Notes')}&value=${encodeURIComponent(newNotes)}`;
-    await fetch(url);
-    console.log('Notes saved to sheet');
+    const r = await fetch(url);
+    const d = await r.json();
+    if (!d.success) console.warn('Notes save failed:', d.error);
   } catch(e) {
     console.error('Note save error:', e);
   }
@@ -3805,20 +3950,39 @@ function generateReceipt(mr, mode) {
 }
 function viewReceipt(mr) { generateReceipt(mr, 'view'); }
 
+const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+// Parses the "DD-Mon-YYYY" date format used throughout this app's payment records.
+function parseAppDate(s) {
+  const m = (s||'').match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/);
+  if (!m) return null;
+  const monIdx = MONTH_ABBR.indexOf(m[2]);
+  if (monIdx === -1) return null;
+  return new Date(parseInt(m[3]), monIdx, parseInt(m[1]));
+}
+
 function updateRevenueStats() {
   const today = new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
-  let todayRev = 0, totalBal = 0;
+  const now = new Date();
+  const curMonth = now.getMonth(), curYear = now.getFullYear();
+  let todayRev = 0, monthRev = 0, totalBal = 0;
   PATIENTS.forEach(p => {
     const pays = PAYMENTS[getMR(p)] || [];
-    pays.forEach(pay => { if(pay.date === today) todayRev += parseFloat(pay.paid)||0; });
+    pays.forEach(pay => {
+      const paidAmt = parseFloat(pay.paid)||0;
+      if (pay.date === today) todayRev += paidAmt;
+      const d = parseAppDate(pay.date);
+      if (d && d.getMonth() === curMonth && d.getFullYear() === curYear) monthRev += paidAmt;
+    });
     const charged = pays.reduce((s,pay)=>s+(parseFloat(pay.charged)||0),0);
     const discount = pays.reduce((s,pay)=>s+(parseFloat(pay.discount)||0),0);
     const paid = pays.reduce((s,pay)=>s+(parseFloat(pay.paid)||0),0);
     totalBal += Math.max(0, charged - discount - paid);
   });
   const rEl = document.getElementById('stRev');
+  const mEl = document.getElementById('stRevMonth');
   const bEl = document.getElementById('stBal');
   if(rEl) rEl.textContent = `PKR ${todayRev.toLocaleString()}`;
+  if(mEl) mEl.textContent = `PKR ${monthRev.toLocaleString()}`;
   if(bEl) bEl.textContent = `PKR ${totalBal.toLocaleString()}`;
 }
 
@@ -4347,7 +4511,7 @@ window.addEventListener('load', () => {
   }, 100);
 });
 
-['srchModal','toothModal','editModal','noteModal','tpModal','priceModal','addPriceModal','invModal','addInvModal','delModal','delApptModal','editApptModal','payModal','labModal','ptModal','labBillingModal','botModal','reminderModal'].forEach(id=>{
+['srchModal','toothModal','editModal','noteModal','tpModal','priceModal','addPriceModal','invModal','addInvModal','delModal','delApptModal','editApptModal','payModal','labModal','ptModal','labBillingModal','botModal','reminderModal','recallModal'].forEach(id=>{
   document.getElementById(id).addEventListener('click',function(e){if(e.target===this)this.classList.remove('open');});
 });
 </script>
