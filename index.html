@@ -1360,7 +1360,7 @@ async function initApp() {
     document.getElementById('stR').textContent = countOvr();
     document.getElementById('syncBar').innerHTML = `<div class="syncBar">✅ Synced · ${PATIENTS.length} patients · ${EVENTS.length} today</div>`;
 
-    renderToday(); renderPats(); renderAppts(); renderRc(); renderPrices(); renderBalances(); updateRevenueStats(); renderInventory();
+    renderToday(); renderPats(); renderAppts(); renderRc(); renderPrices(); renderBalances(); updateRevenueStats(); renderInventory(); renderTimetable();
 
     if (CHAT_SHORTCUT && !chatShortcutHandled) {
       chatShortcutHandled = true;
