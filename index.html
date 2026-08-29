@@ -497,7 +497,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;pos
     <div class="fG"><label class="fL">Doctor</label>
       <select class="fS" id="aDoc" onchange="updateAvailableSlots()"><option>Dr. Abdullah</option><option>Dr. Athar</option><option>Dr. Hussain</option><option>Dr. Asim</option></select>
     </div>
-    <div class="fG"><label class="fL">Treatment</label><input class="fI" id="aTreat" placeholder="e.g. RCT, Scaling"></div>
+    <div class="fG"><label class="fL">Treatment</label>
+      <select class="fS" id="aTreat"><option value="">Select treatment</option></select>
+    </div>
     <div class="fG"><label class="fL">Status</label>
       <select class="fS" id="aStat"><option value="">Confirmed</option><option value="??">Unconfirmed ??</option></select>
     </div>
@@ -579,6 +581,16 @@ html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;pos
 </div>
 
 <!-- SET RECALL MODAL -->
+<div class="ov" id="visitDateModal">
+  <div class="sh">
+    <div class="handle"></div>
+    <div class="shT">Edit First Visit Date</div>
+    <div class="fG"><label class="fL">Date</label><input class="fI" type="date" id="visitDateInput"></div>
+    <button class="btnP" onclick="saveVisitDate()">💾 Save</button>
+    <button class="btnS" onclick="closeVisitDateModal()">Cancel</button>
+  </div>
+</div>
+
 <div class="ov" id="recallModal">
   <div class="sh">
     <div class="handle"></div>
@@ -1416,7 +1428,7 @@ async function initApp() {
   const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   document.getElementById('hDate').innerHTML = `<strong>${days[now.getDay()]}, ${now.getDate()} ${months[now.getMonth()]}</strong>${now.getFullYear()}`;
-  document.getElementById('aDate').value = now.toISOString().split('T')[0];
+  document.getElementById('aDate').value = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
   document.getElementById('aTime').value = '18:30';
 
   // Prices are a device-level preference, not patient data — localStorage only.
@@ -1850,7 +1862,8 @@ function renderProfile(p) {
   const bal=f(p,'Balance (PKR)'), doc=f(p,'Treating Doctor'), next=f(p,'Next Appointment');
   const ref=f(p,'Referred By'), gen=f(p,'Gender'), treat=f(p,'Treatment / Procedure');
   const initials=name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase();
-  const vFmt=visit?new Date(visit).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'—';
+  const vDateObj = visit ? new Date(visit) : null;
+  const vFmt = vDateObj && !isNaN(vDateObj) ? vDateObj.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : (visit || '—');
   if(!toothStates[mr]) toothStates[mr]={};
 
   const nextApptEv = getPatientNextAppointment(name);
@@ -1901,13 +1914,14 @@ function renderProfile(p) {
       const qty=parseFloat(item.qty)||1;
       const lineBefore=(parseFloat(item.cost)||0)*qty;
       const lineAfter=lineBefore-disc;
+      const isDone=item.status==='Completed';
       return `
-    <div class="tpCard" style="border-left:4px solid ${pc}">
-      <span style="width:20px;height:20px;border-radius:5px;background:${pc};color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${ps}</span>
+    <div class="tpCard" style="border-left:4px solid ${isDone?'#a0aec0':pc}${isDone?';opacity:.65':''}">
+      <span style="width:20px;height:20px;border-radius:5px;background:${isDone?'#a0aec0':pc};color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${isDone?'✓':ps}</span>
       <div class="tpInfo">
-        <div class="tpProc">${item.proc} ${item.tooth?'· Tooth '+item.tooth:''}${qty>1?` <span style="color:var(--teal-d)">×${qty}</span>`:''}</div>
+        <div class="tpProc" style="${isDone?'text-decoration:line-through':''}">${item.proc} ${item.tooth?'· Tooth '+item.tooth:''}${qty>1?` <span style="color:var(--teal-d)">×${qty}</span>`:''}</div>
         <div class="tpMeta">
-          <span class="priBadge ${item.priority==='Urgent'?'priUrgent':item.priority==='Soon'?'priSoon':'priRoutine'}">${item.priority}</span>
+          ${isDone?'<span class="priBadge" style="background:#e2e8f0;color:#4a5568">✅ Completed</span>':`<span class="priBadge ${item.priority==='Urgent'?'priUrgent':item.priority==='Soon'?'priSoon':'priRoutine'}">${item.priority}</span>`}
           ${item.note?`<span class="tpStatus"> · ${item.note}</span>`:''}
         </div>
       </div>
@@ -1916,7 +1930,7 @@ function renderProfile(p) {
         <div class="tpCost">PKR ${lineAfter.toLocaleString()}</div>
         ${disc>0?`<div style="font-size:9px;color:var(--red);font-weight:600">−${disc.toLocaleString()} off</div>`:''}
         <div class="tpActions" style="justify-content:flex-end;margin-top:4px">
-          <button class="tpBtn tpComplete" onclick="completeTpItem('${mr}',${idx})" title="Mark done">✓</button>
+          ${isDone?'':`<button class="tpBtn tpComplete" onclick="completeTpItem('${mr}',${idx})" title="Mark done">✓</button>`}
           <button class="tpBtn tpDelete" onclick="deleteTpItem('${mr}',${idx})" title="Remove">✕</button>
         </div>
       </div>
@@ -1936,7 +1950,7 @@ function renderProfile(p) {
   <div class="sec">Patient Info <span style="font-size:9px;color:var(--teal-d);font-weight:400;letter-spacing:0">(tap to edit)</span></div>
   <div class="iGrid">
     <div class="iItem" onclick="openEdit('Patient Name','${name}','${mr}')" style="grid-column:span 2"><div class="iLbl">Patient Name</div><div class="iVal">${name}</div><div class="editHint">✏ tap to edit</div></div>
-    <div class="iItem" onclick="openEdit('Visit Date','${visit}','${mr}')"><div class="iLbl">First Visit</div><div class="iVal">${vFmt}</div><div class="editHint">✏ tap to edit</div></div>
+    <div class="iItem" onclick="openVisitDateModal('${mr}','${visit}')"><div class="iLbl">First Visit</div><div class="iVal">${vFmt}</div><div class="editHint">📅 tap to edit</div></div>
     <div class="iItem" onclick="openEdit('Gender','${gen}','${mr}')"><div class="iLbl">Gender</div><div class="iVal">${gen||'—'}</div><div class="editHint">✏ tap to edit</div></div>
     <div class="iItem" onclick="openEdit('Phone Number','${phone}','${mr}')"><div class="iLbl">Phone</div><div class="iVal" style="font-size:11px">${phone||'—'}</div><div class="editHint">✏ tap to edit</div></div>
     <div class="iItem" onclick="openEdit('Treating Doctor','${doc}','${mr}')"><div class="iLbl">Doctor</div><div class="iVal" style="font-size:11px">${doc||'—'}</div><div class="editHint">✏ tap to edit</div></div>
@@ -2137,6 +2151,33 @@ function openEdit(field, value, mr) {
 }
 
 let curRecallMR = null;
+let curVisitDateMR = null;
+function openVisitDateModal(mr, currentValue) {
+  curVisitDateMR = mr;
+  const d = currentValue ? new Date(currentValue) : null;
+  document.getElementById('visitDateInput').value = (d && !isNaN(d)) ? d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0') : '';
+  document.getElementById('visitDateModal').classList.add('open');
+}
+function closeVisitDateModal(){ document.getElementById('visitDateModal').classList.remove('open'); }
+
+async function saveVisitDate() {
+  const dateVal = document.getElementById('visitDateInput').value;
+  if (!dateVal) { alert('Pick a date'); return; }
+  const dateLabel = new Date(dateVal+'T12:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+  const p = PATIENTS.find(x=>getMR(x)===curVisitDateMR);
+  if (p) p['Visit Date'] = dateLabel;
+  closeVisitDateModal();
+  refreshProfile(curVisitDateMR);
+  try {
+    const url = `${SCRIPT_URL}?action=update&mr=${encodeURIComponent(curVisitDateMR)}&field=${encodeURIComponent('Visit Date')}&value=${encodeURIComponent(dateLabel)}`;
+    const r = await fetch(url);
+    const d = await r.json();
+    if (!d.success) console.warn('Visit Date save failed:', d.error);
+  } catch(e) {
+    console.error('Visit Date save error:', e);
+  }
+}
+
 function openRecallModal(mr, currentValue) {
   curRecallMR = mr;
   document.getElementById('recallDate').value = '';
@@ -4212,12 +4253,15 @@ function go(screen) {
 }
 
 function resetAddForm() {
-  const fields = ['aName','aTreat','aPhone','aMed','aNote'];
+  const fields = ['aName','aPhone','aMed','aNote'];
   fields.forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
   const selects = ['aGen','aRef','aStat','aDoc'];
   selects.forEach(id => { const el=document.getElementById(id); if(el) el.selectedIndex=0; });
+  const treatSel = document.getElementById('aTreat');
+  if (treatSel) treatSel.innerHTML = '<option value="">Select treatment</option>' + PRICES.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
   document.getElementById('aDur').value = '45';
-  document.getElementById('aDate').value = new Date().toISOString().split('T')[0];
+  const now = new Date();
+  document.getElementById('aDate').value = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
   document.getElementById('aTime').innerHTML = '<option value="">Pick a date first...</option>';
   const slotStatus = document.getElementById('slotStatus');
   if(slotStatus) slotStatus.textContent='';
@@ -4723,7 +4767,8 @@ function openLabModal(mr) {
   curLabMR = mr;
   renderLabHistory(mr);
   document.getElementById('labType').value = '';
-  document.getElementById('labSentDate').value = new Date().toISOString().split('T')[0];
+  const lbn = new Date();
+  document.getElementById('labSentDate').value = lbn.getFullYear()+'-'+String(lbn.getMonth()+1).padStart(2,'0')+'-'+String(lbn.getDate()).padStart(2,'0');
   document.getElementById('labRecDate').value = '';
   document.getElementById('labNote').value = '';
   document.getElementById('labModal').classList.add('open');
@@ -5213,7 +5258,7 @@ window.addEventListener('load', () => {
   }, 100);
 });
 
-['srchModal','toothModal','editModal','noteModal','tpModal','priceModal','addPriceModal','invModal','addInvModal','delModal','delApptModal','editApptModal','payModal','labModal','ptModal','labBillingModal','botModal','reminderModal','recallModal','nextApptModal','manageListModal','rxModal'].forEach(id=>{
+['srchModal','toothModal','editModal','noteModal','tpModal','priceModal','addPriceModal','invModal','addInvModal','delModal','delApptModal','editApptModal','payModal','labModal','ptModal','labBillingModal','botModal','reminderModal','recallModal','nextApptModal','manageListModal','rxModal','visitDateModal'].forEach(id=>{
   document.getElementById(id).addEventListener('click',function(e){if(e.target===this)this.classList.remove('open');});
 });
 </script>
