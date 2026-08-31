@@ -398,6 +398,13 @@ html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;pos
         <div class="chip" onclick="fAppt('confirmed',this)">Confirmed</div>
         <div class="chip" onclick="fAppt('unconfirmed',this)">Unconfirmed</div>
       </div>
+      <div class="fRow" id="apptOutcomeF">
+        <div class="chip on" onclick="fApptOutcome('all',this)">Any Outcome</div>
+        <div class="chip" onclick="fApptOutcome('ShowUp',this)">✅ Showed Up</div>
+        <div class="chip" onclick="fApptOutcome('NoShow',this)">❌ No Show</div>
+        <div class="chip" onclick="fApptOutcome('Reappointed',this)">🔄 Reappointed</div>
+        <div class="chip" onclick="fApptOutcome('Referred',this)">➡️ Referred</div>
+      </div>
       <div class="fRow" id="apptDoc">
         <div class="chip on" onclick="fApptDoc('all',this)">All Doctors</div>
         <div class="chip" onclick="fApptDoc('Dr. Abdullah',this)">Dr. Abdullah</div>
@@ -497,8 +504,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;pos
     <div class="fG"><label class="fL">Doctor</label>
       <select class="fS" id="aDoc" onchange="updateAvailableSlots()"><option>Dr. Abdullah</option><option>Dr. Athar</option><option>Dr. Hussain</option><option>Dr. Asim</option></select>
     </div>
-    <div class="fG"><label class="fL">Treatment</label>
-      <select class="fS" id="aTreat"><option value="">Select treatment</option></select>
+    <div class="fG"><label class="fL">Treatment <span style="font-size:9px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(select all that apply)</span></label>
+      <div id="aTreatList" style="max-height:180px;overflow-y:auto;border:1.5px solid var(--border);border-radius:10px;padding:6px"></div>
     </div>
     <div class="fG"><label class="fL">Status</label>
       <select class="fS" id="aStat"><option value="">Confirmed</option><option value="??">Unconfirmed ??</option></select>
@@ -997,6 +1004,20 @@ html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;pos
   </div>
 </div>
 
+<!-- APPOINTMENT OUTCOME PICKER -->
+<div class="ov" id="outcomeModal">
+  <div class="sh">
+    <div class="handle"></div>
+    <div class="shT">Set Appointment Outcome</div>
+    <button class="btnP" onclick="setApptOutcome('ShowUp')" style="background:linear-gradient(135deg,#2f855a,#38a169)">✅ Showed Up</button>
+    <button class="btnP" onclick="setApptOutcome('NoShow')" style="background:linear-gradient(135deg,#c53030,#e53e3e)">❌ No Show</button>
+    <button class="btnP" onclick="setApptOutcome('Reappointed')" style="background:linear-gradient(135deg,#2563eb,#3b82f6)">🔄 Reappointed</button>
+    <button class="btnP" onclick="setApptOutcome('Referred')" style="background:linear-gradient(135deg,#c05621,#dd6b20)">➡️ Referred</button>
+    <button class="btnS" onclick="setApptOutcome(null)">Clear Outcome</button>
+    <button class="btnS" onclick="closeOutcomeModal()">Cancel</button>
+  </div>
+</div>
+
 <!-- DELETE APPOINTMENT MODAL -->
 <div class="ov" id="delApptModal">
   <div class="sh">
@@ -1027,6 +1048,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;pos
       </div>
     </div>
     <div class="fG"><label class="fL">Treatment</label><input class="fI" id="eaTreat" placeholder="Treatment"></div>
+    <div class="fG"><label class="fL">Status</label>
+      <select class="fS" id="eaStat"><option value="">Confirmed</option><option value="??">Unconfirmed ??</option></select>
+    </div>
     <button class="btnP" onclick="doEditAppt()">💾 Save Changes</button>
     <button class="btnS" onclick="closeEditAppt()">Cancel</button>
   </div>
@@ -1280,6 +1304,7 @@ let DIAGNOSES = []; // clinic-wide saved diagnosis names
 let toothStates = {};
 let apptF = 'all';
 let apptDoc = 'all';
+let apptOutcomeF = 'all';
 
 // PHC-compliance prescription header info, per doctor. Specialization is
 // left blank where the doctor hasn't specified one for this document.
@@ -1696,6 +1721,7 @@ function getPatientPastVisitCount(name) {
     const sISO = ev.start && ev.start.dateTime;
     if (!sISO) return false;
     if (new Date(sISO) > now) return false;
+    if (parseOutcome(ev.summary) === 'NoShow') return false; // a no-show never actually happened
     const pName = (ev.summary||'').split(' - ')[0].replace(/\[.*?\]/g,'').replace(/\?\?/g,'').trim();
     return pName.toLowerCase() === name.toLowerCase();
   }).length;
@@ -1761,17 +1787,56 @@ function renderToday() {
   el.innerHTML = EVENTS.map(ev => evCardHTML(ev)).join('');
 }
 
+// Appointment outcome tracking — encoded as a {Marker} suffix on the
+// calendar event title, matching the existing "??" unconfirmed-marker
+// convention so it stays visible even in Google Calendar itself, not
+// just inside this app.
+const OUTCOME_META = {
+  ShowUp:      { label: 'Showed Up',   icon: '✅', color: '#38a169' },
+  NoShow:      { label: 'No Show',     icon: '❌', color: '#e53e3e' },
+  Reappointed: { label: 'Reappointed', icon: '🔄', color: '#3b82f6' },
+  Referred:    { label: 'Referred',    icon: '➡️', color: '#dd6b20' }
+};
+function parseOutcome(title) {
+  const m = (title||'').match(/\{(ShowUp|NoShow|Reappointed|Referred)\}/);
+  return m ? m[1] : null;
+}
+function stripOutcome(title) {
+  return (title||'').replace(/\s*\{(ShowUp|NoShow|Reappointed|Referred)\}/, '').trim();
+}
+
+let curOutcomeEvent = null;
+function openOutcomePicker(evId, calId, title, startISO, endISO) {
+  curOutcomeEvent = { evId, calId, title, startISO, endISO };
+  document.getElementById('outcomeModal').classList.add('open');
+}
+function closeOutcomeModal(){ document.getElementById('outcomeModal').classList.remove('open'); }
+
+async function setApptOutcome(outcome) {
+  if (!curOutcomeEvent) return;
+  const { evId, calId, title, startISO, endISO } = curOutcomeEvent;
+  const clean = stripOutcome(title);
+  const newTitle = outcome ? clean + ' {' + outcome + '}' : clean;
+  closeOutcomeModal();
+  const ok = await updateCalEvent(evId, calId, newTitle, startISO, endISO);
+  if (ok) { await initApp(); }
+  else alert('⚠ Could not update outcome — please try again.');
+}
+
 function evCardHTML(ev) {
   const title = ev.summary||'';
   const parts = title.split(' - ');
   const pName = parts[0].replace(/\?\?/g,'').replace(/\[.*?\]/g,'').trim();
-  const treat = parts.slice(1).join(' - ');
+  const treatRaw = parts.slice(1).join(' - ');
+  const outcome = parseOutcome(treatRaw) || parseOutcome(title);
+  const treat = stripOutcome(treatRaw);
   const pat = findPat(pName);
   const mr = pat?getMR(pat):'—';
   const phone = pat?getPhone(pat):'';
   const med = pat?getMed(pat):'';
   const gender = pat?f(pat,'Gender'):'';
   const sISO = ev.start?.dateTime||ev.start?.date;
+  const eISO = ev.end?.dateTime||ev.end?.date;
   const t = sISO?fmt(sISO):{hr:'—',ap:''};
   const unc = title.includes('??');
   const phoneClean = phone.replace(/'/g,'').replace(/"/g,'');
@@ -1784,12 +1849,17 @@ function evCardHTML(ev) {
   const evId = ev.id || '';
   const evCalId = ev._calId || 'primary';
   const isU2 = (ev._calId||'').includes('smilehubclinics7');
+  const om = outcome ? OUTCOME_META[outcome] : null;
+  const outcomeBadge = om ? `<span style="display:inline-block;font-size:9px;font-weight:700;color:${om.color};background:${om.color}18;border-radius:5px;padding:1px 6px;margin-left:6px;vertical-align:middle">${om.icon} ${om.label}</span>` : '';
+  const outcomeBtnStyle = om ? `background:${om.color}18;color:${om.color}` : 'background:rgba(107,122,141,.1);color:var(--muted)';
+  const titleForPicker = (treatRaw ? pName+' - '+treatRaw : pName).replace(/'/g,'').replace(/"/g,'');
   return `<div class="apC ${unc?'unc':''} ${isU2?'u2':''}" data-mr="${mr}" data-name="${pName.replace(/"/g,'')}" data-evid="${evId}" onclick="handleCard(this)">
     ${med?'<div class="aDot"></div>':''}
     <div class="tBox"><div class="tHr">${t.hr}</div><div class="tAp">${t.ap}</div></div>
-    <div class="apInfo"><div class="apNm">${pName}</div><div class="apSb">${treat||'No treatment noted'}</div><div class="mrT">${mr}</div></div>
+    <div class="apInfo"><div class="apNm">${pName}${outcomeBadge}</div><div class="apSb">${treat||'No treatment noted'}</div><div class="mrT">${mr}</div></div>
     <div class="apActs">
       ${reminderBtn}
+      <button class="iBtn" style="${outcomeBtnStyle}" onclick="event.stopPropagation();openOutcomePicker('${evId}','${evCalId}','${titleForPicker}','${sISO||''}','${eISO||''}')" title="Set outcome">${om?om.icon:'🏷️'}</button>
       <button class="iBtn vwB" onclick="event.stopPropagation();handleCard(this.closest('.apC'))">👤</button>
       <button class="iBtn" style="background:rgba(221,107,32,.1);color:var(--orange)" onclick="event.stopPropagation();openEditAppt('${evId}','${pName.replace(/'/g,'')}','${sISO||''}','${treat.replace(/'/g,'')}','${evCalId}')">✏</button>
       <button class="iBtn" style="background:rgba(229,62,62,.1);color:var(--red)" onclick="event.stopPropagation();confirmDelAppt('${evId}','${pName.replace(/'/g,'')}','${evCalId}')">🗑</button>
@@ -3177,6 +3247,12 @@ function openEditAppt(evId, name, startISO, treat, calId) {
   curEditCalId = calId || 'primary';
   document.getElementById('eaName').value = name || '';
   document.getElementById('eaTreat').value = treat || '';
+  // Status and any outcome marker live on the actual event's title, not
+  // in the (already-cleaned) parameters passed in from the card — look
+  // them up directly so editing never silently clears either one.
+  const srcEvent = ALL_EVENTS.find(ev => ev.id === evId);
+  const srcTitle = srcEvent ? srcEvent.summary : '';
+  document.getElementById('eaStat').value = srcTitle.includes('??') ? '??' : '';
   if (startISO) {
     try {
       const d = new Date(startISO);
@@ -3202,11 +3278,17 @@ async function doEditAppt() {
   const dur = parseInt(document.getElementById('eaDur').value);
   const treat = document.getElementById('eaTreat').value.trim();
   const doctor = document.getElementById('eaDoc').value;
+  const stat = document.getElementById('eaStat').value;
   if (!name || !date || !time) { alert('Fill in all required fields'); return; }
   // Build ISO string with Pakistan timezone offset (+05:00)
   const start = new Date(date + 'T' + time + ':00+05:00');
   const end = new Date(start.getTime() + dur * 60000);
-  const summary = '[' + doctor + '] ' + name + ' - ' + treat;
+  // Preserve any existing outcome marker (Show Up / No Show / etc.) —
+  // it has its own dedicated picker on the card, so editing other
+  // fields here shouldn't silently erase it.
+  const srcEvent = ALL_EVENTS.find(ev => ev.id === curEditEvId);
+  const existingOutcome = srcEvent ? parseOutcome(srcEvent.summary) : null;
+  const summary = '[' + doctor + '] ' + name + stat + ' - ' + treat + (existingOutcome ? ' {' + existingOutcome + '}' : '');
   const cId = curEditCalId || 'primary';
   const ok = await updateCalEvent(curEditEvId, cId, summary, start.toISOString(), end.toISOString());
   closeEditAppt();
@@ -4115,7 +4197,7 @@ function botAnswerSchedule(doctor, dateStr) {
     const h = d.getHours(), mn = d.getMinutes(), h12 = h%12||12, ap = h>=12?'PM':'AM';
     const timeLabel = h12+':'+String(mn).padStart(2,'0')+' '+ap;
     const pName = (ev.summary||'').split(' - ')[0].replace(/\[.*?\]/g,'').replace(/\?\?/g,'').trim();
-    const treat = (ev.summary||'').split(' - ').slice(1).join(' - ');
+    const treat = stripOutcome((ev.summary||'').split(' - ').slice(1).join(' - '));
     return '- ' + timeLabel + ': ' + pName + (treat ? ' (' + treat + ')' : '');
   });
   addBotMessage('bot', header + ' — ' + dayEvents.length + ' appointment' + (dayEvents.length===1?'':'s') + '\n' + lines.join('\n'));
@@ -4133,7 +4215,8 @@ async function bookAppt() {
   const date=document.getElementById('aDate').value;
   const time=document.getElementById('aTime').value;
   const dur=parseInt(document.getElementById('aDur').value);
-  const treat=document.getElementById('aTreat').value.trim();
+  const selectedTreats=Array.from(document.querySelectorAll('.aTreatChk:checked')).map(c=>c.value);
+  const treat=selectedTreats.join(', ');
   const doctor=document.getElementById('aDoc').value;
   const stat=document.getElementById('aStat').value;
   if(!name||!date||!time){alert('Name, date and time required');return;}
@@ -4162,7 +4245,29 @@ async function bookAppt() {
     } catch(e) { console.error('Sheet append error:', e); }
   }
 
-  if(calOk){alert(`✅ Appointment booked for ${name}!${!existing?' New patient registered.':''}`); await initApp(); go('home');}
+  // Selected treatments are added to the patient's Treatment Plan
+  // automatically — same shape as adding one manually from the profile.
+  if (calOk && selectedTreats.length) {
+    const patAfter = findPat(name);
+    const mrForPlan = patAfter ? getMR(patAfter) : null;
+    if (mrForPlan) {
+      if (!TREATMENT_PLANS[mrForPlan]) TREATMENT_PLANS[mrForPlan] = [];
+      selectedTreats.forEach(procName => {
+        const priceEntry = PRICES.find(p => p.name === procName);
+        TREATMENT_PLANS[mrForPlan].push({
+          tooth: '', proc: procName,
+          cost: priceEntry ? (parseFloat(priceEntry.price)||0) : 0,
+          qty: 1, discount: 0, priority: 'Routine', note: 'Added from appointment booking',
+          status: 'Planned',
+          date: new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short'})
+        });
+      });
+      localStorage.setItem('smilehub_plans', JSON.stringify(TREATMENT_PLANS));
+      syncSheetField(mrForPlan, 'Treatment Plan JSON', JSON.stringify(TREATMENT_PLANS[mrForPlan]));
+    }
+  }
+
+  if(calOk){alert(`✅ Appointment booked for ${name}!${!existing?' New patient registered.':''}${selectedTreats.length?' Treatment plan updated.':''}`); await initApp(); go('home');}
   else alert('⚠ Could not add to Google Calendar: ' + (calResult.error||'unknown error') + '\n\nNothing was booked — please try again, or check that this account has edit access to ' + doctor + '\'s calendar.');
 }
 
@@ -4257,8 +4362,14 @@ function resetAddForm() {
   fields.forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
   const selects = ['aGen','aRef','aStat','aDoc'];
   selects.forEach(id => { const el=document.getElementById(id); if(el) el.selectedIndex=0; });
-  const treatSel = document.getElementById('aTreat');
-  if (treatSel) treatSel.innerHTML = '<option value="">Select treatment</option>' + PRICES.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
+  const treatList = document.getElementById('aTreatList');
+  if (treatList) {
+    treatList.innerHTML = PRICES.map((p,idx) => `
+      <label style="display:flex;align-items:center;gap:8px;padding:6px 4px;font-size:12.5px;cursor:pointer;border-bottom:1px solid var(--bg)">
+        <input type="checkbox" class="aTreatChk" value="${p.name.replace(/"/g,'')}" style="width:17px;height:17px;flex-shrink:0">
+        <span>${p.name}</span>
+      </label>`).join('');
+  }
   document.getElementById('aDur').value = '45';
   const now = new Date();
   document.getElementById('aDate').value = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
@@ -5068,6 +5179,13 @@ function fApptDoc(doc, el) {
   renderAllAppts();
 }
 
+function fApptOutcome(outcome, el) {
+  apptOutcomeF = outcome;
+  document.querySelectorAll('#apptOutcomeF .chip').forEach(c=>c.classList.remove('on'));
+  el.classList.add('on');
+  renderAllAppts();
+}
+
 // ═══════════════════════════════════════
 // DOCTOR TIMETABLE VIEW
 // ═══════════════════════════════════════
@@ -5141,7 +5259,7 @@ function renderTimetable() {
     const d = new Date(sISO);
     const durMin = ev.end && ev.end.dateTime ? Math.round((new Date(ev.end.dateTime) - d) / 60000) : 45;
     const pName = (ev.summary||'').split(' - ')[0].replace(/\[.*?\]/g,'').replace(/\?\?/g,'').trim();
-    const treat = (ev.summary||'').split(' - ').slice(1).join(' - ');
+    const treat = stripOutcome((ev.summary||'').split(' - ').slice(1).join(' - '));
     const startMin = d.getHours()*60 + d.getMinutes();
     for (let m = startMin; m < startMin + durMin; m += 30) {
       const slotH = Math.floor(m/60), slotM = (m - slotH*60) >= 30 ? 30 : 0;
@@ -5216,6 +5334,7 @@ function renderAllAppts() {
     if(apptF==='unconfirmed' && !t.includes('??')) return false;
     if(apptF==='confirmed' && t.includes('??')) return false;
     if(apptDoc !== 'all' && !ev.summary?.includes(apptDoc)) return false;
+    if(apptOutcomeF !== 'all' && parseOutcome(ev.summary) !== apptOutcomeF) return false;
     return true;
   }).sort((a,b) => {
     const ta = new Date(a.start?.dateTime||a.start?.date||0);
@@ -5258,7 +5377,7 @@ window.addEventListener('load', () => {
   }, 100);
 });
 
-['srchModal','toothModal','editModal','noteModal','tpModal','priceModal','addPriceModal','invModal','addInvModal','delModal','delApptModal','editApptModal','payModal','labModal','ptModal','labBillingModal','botModal','reminderModal','recallModal','nextApptModal','manageListModal','rxModal','visitDateModal'].forEach(id=>{
+['srchModal','toothModal','editModal','noteModal','tpModal','priceModal','addPriceModal','invModal','addInvModal','delModal','delApptModal','editApptModal','payModal','labModal','ptModal','labBillingModal','botModal','reminderModal','recallModal','nextApptModal','manageListModal','rxModal','visitDateModal','outcomeModal'].forEach(id=>{
   document.getElementById(id).addEventListener('click',function(e){if(e.target===this)this.classList.remove('open');});
 });
 </script>
