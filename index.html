@@ -696,6 +696,18 @@ html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;pos
       <div class="fG"><label class="fL">Temperature</label><input class="fI" id="rxTemp" placeholder="98.4°F"></div>
       <div class="fG"><label class="fL">RR</label><input class="fI" id="rxRR" placeholder="16 /min"></div>
     </div>
+    <div class="fR">
+      <div class="fG"><label class="fL">Time In</label><input class="fI" type="time" id="rxTimeIn"></div>
+      <div class="fG"><label class="fL">Time Out</label><input class="fI" type="time" id="rxTimeOut"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;flex:1;background:var(--bg);border-radius:9px;padding:8px 10px;cursor:pointer">
+        <input type="checkbox" id="rxVCO" style="width:16px;height:16px;flex-shrink:0"> Verbal Consent Obtained (VCO)
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;flex:1;background:var(--bg);border-radius:9px;padding:8px 10px;cursor:pointer">
+        <input type="checkbox" id="rxRVC" style="width:16px;height:16px;flex-shrink:0"> Responding to Verbal Commands
+      </label>
+    </div>
 
     <div class="sec">Clinical Notes</div>
     <div class="fG"><label class="fL">Allergies</label><input class="fI" id="rxAllergies" placeholder="None reported"></div>
@@ -798,6 +810,34 @@ html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;pos
     <button class="btnP" onclick="addAnotherTpItem()">➕ Add & Enter Next Procedure</button>
     <button class="btnP" onclick="finishTpModal()" style="background:linear-gradient(135deg,var(--teal-d),var(--teal))">✅ Done</button>
     <button class="btnS" onclick="closeTpModal()">Cancel</button>
+  </div>
+</div>
+
+<!-- TREATMENT PERFORMED MODAL -->
+<div class="ov" id="tpfModal">
+  <div class="sh">
+    <div class="handle"></div>
+    <div class="shT">Add Treatment Performed</div>
+    <div id="tpfAddedList"></div>
+    <div class="fG"><label class="fL">Date</label><input class="fI" type="date" id="tpfDate"></div>
+    <div class="fG">
+      <label class="fL">Select Teeth <span style="font-size:9px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(tap to select, multiple allowed)</span></label>
+      <div id="tpfPicker"></div>
+    </div>
+    <div class="fG"><label class="fL">Tooth Number</label><input class="fI" id="tpfTooth" placeholder="e.g. 36, 46 or Full Mouth"></div>
+    <div class="fG"><label class="fL">Procedure</label>
+      <select class="fS" id="tpfProc" onchange="fillTpfCost(this.value)">
+        <option value="">Select procedure</option>
+      </select>
+    </div>
+    <div class="fR">
+      <div class="fG"><label class="fL">Cost per Tooth (PKR)</label><input class="fI" type="number" id="tpfCost" placeholder="0" oninput="updateTpfLineTotal()"></div>
+      <div class="fG"><label class="fL">Quantity <span style="font-size:9px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(auto = teeth picked)</span></label><input class="fI" type="number" id="tpfQty" value="1" min="1" oninput="updateTpfLineTotal()"></div>
+    </div>
+    <div id="tpfLineTotal" style="font-size:12px;color:var(--navy);font-weight:600;margin:-4px 0 10px;text-align:right"></div>
+    <button class="btnP" onclick="addAnotherTpfItem()">➕ Add & Enter Next Procedure</button>
+    <button class="btnP" onclick="finishTpfModal()" style="background:linear-gradient(135deg,var(--teal-d),var(--teal))">✅ Done</button>
+    <button class="btnS" onclick="closeTpfModal()">Cancel</button>
   </div>
 </div>
 
@@ -1304,6 +1344,7 @@ let TREATMENT_PLANS = {};
 let PAYMENTS = {}; // payments per patient
 let LAB_WORK = {}; // lab work per patient
 let PRESCRIPTIONS = {}; // prescriptions per patient
+let TREATMENT_PERFORMED = {}; // treatment actually performed per patient — parallels TREATMENT_PLANS but tracks reality, not the proposal
 let MEDICATIONS = []; // clinic-wide saved medication names
 let DIAGNOSES = []; // clinic-wide saved diagnosis names
 let toothStates = {};
@@ -1485,6 +1526,9 @@ async function initApp() {
   const savedRx = localStorage.getItem('smilehub_prescriptions');
   PRESCRIPTIONS = savedRx ? JSON.parse(savedRx) : {};
 
+  const savedPerformed = localStorage.getItem('smilehub_performed');
+  TREATMENT_PERFORMED = savedPerformed ? JSON.parse(savedPerformed) : {};
+
   const savedMeds = localStorage.getItem('smilehub_medications');
   MEDICATIONS = savedMeds ? JSON.parse(savedMeds) : [...DEFAULT_MEDICATIONS];
 
@@ -1506,15 +1550,18 @@ async function initApp() {
       const payJson = f(p, 'Payments JSON');
       const labJson = f(p, 'Lab Work JSON');
       const rxJson = f(p, 'Prescriptions JSON');
+      const tpfJson = f(p, 'Treatment Performed JSON');
       if (tpJson) { try { TREATMENT_PLANS[mr] = JSON.parse(tpJson); } catch(e){} }
       if (payJson) { try { PAYMENTS[mr] = JSON.parse(payJson); } catch(e){} }
       if (labJson) { try { LAB_WORK[mr] = JSON.parse(labJson); } catch(e){} }
       if (rxJson) { try { PRESCRIPTIONS[mr] = JSON.parse(rxJson); } catch(e){} }
+      if (tpfJson) { try { TREATMENT_PERFORMED[mr] = JSON.parse(tpfJson); } catch(e){} }
     });
     localStorage.setItem('smilehub_plans', JSON.stringify(TREATMENT_PLANS));
     localStorage.setItem('smilehub_payments', JSON.stringify(PAYMENTS));
     localStorage.setItem('smilehub_lab', JSON.stringify(LAB_WORK));
     localStorage.setItem('smilehub_prescriptions', JSON.stringify(PRESCRIPTIONS));
+    localStorage.setItem('smilehub_performed', JSON.stringify(TREATMENT_PERFORMED));
 
     // Price list / Inventory are clinic-wide, not per-patient, so they live
     // on a special non-patient settings row (MR Number = CLINIC_SETTINGS)
@@ -2011,6 +2058,33 @@ function renderProfile(p) {
       </div>
     </div>`;}).join('')}` : '<div style="color:var(--muted);font-size:12px;padding:8px 0">No treatment plan yet</div>';
 
+  // Treatment performed — mirrors the plan cards above, but tracks what
+  // actually happened. Pending items show a Mark Done action; done items
+  // show a checkmark and can no longer be double-billed via this screen.
+  const performed = TREATMENT_PERFORMED[mr] || [];
+  const performedHTML = performed.length ? performed.map((item,idx) => {
+    const pc = tpColor(item.proc), ps = tpSymbol(item.proc);
+    const qty = parseFloat(item.qty)||1;
+    const lineTotal = (parseFloat(item.cost)||0)*qty;
+    const isDone = item.status === 'Done';
+    return `
+    <div class="tpCard" style="border-left:4px solid ${isDone?'#38a169':pc}">
+      <span style="width:20px;height:20px;border-radius:5px;background:${isDone?'#38a169':pc};color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${isDone?'✓':ps}</span>
+      <div class="tpInfo">
+        <div class="tpProc">${item.proc} ${item.tooth?'· Tooth '+item.tooth:''}${qty>1?` <span style="color:var(--teal-d)">×${qty}</span>`:''}</div>
+        <div class="tpMeta">
+          <span class="priBadge" style="background:${isDone?'#e6f4ea':'#fff4e0'};color:${isDone?'#2f855a':'#b7791f'}">${isDone?'✅ Done':'⏳ Pending'} · ${item.date}</span>
+        </div>
+      </div>
+      <div style="text-align:right">
+        <div class="tpCost">PKR ${lineTotal.toLocaleString()}</div>
+        <div class="tpActions" style="justify-content:flex-end;margin-top:4px">
+          ${isDone?'':`<button class="tpBtn tpComplete" onclick="markTpfDone('${mr}',${idx})" title="Mark done">✓</button>`}
+          <button class="tpBtn tpDelete" onclick="deleteTpfItem('${mr}',${idx})" title="Remove">✕</button>
+        </div>
+      </div>
+    </div>`;}).join('') : '<div style="color:var(--muted);font-size:12px;padding:8px 0">No treatment performed yet</div>';
+
   document.getElementById('profContent').innerHTML = `
   <button class="bkBtn" onclick="go('patients')">← Patients</button>
   ${med?`<div class="alertB">⚠️ ${med}</div>`:''}
@@ -2056,6 +2130,10 @@ function renderProfile(p) {
     <button class="btnS" onclick="viewTreatmentPlan('${mr}')" style="margin-top:0">👁 View Estimate</button>
     <button class="btnP" onclick="downloadTreatmentPlan('${mr}')" style="background:linear-gradient(135deg,var(--teal-d),var(--teal));margin-top:0">📄 Download</button>
   </div>
+
+  <div class="sec">Treatment Performed <span style="font-size:9px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(what was actually done — may differ from the plan)</span></div>
+  ${performedHTML}
+  <button class="btnP" onclick="openTpfModal('${mr}')" style="background:linear-gradient(135deg,#2f855a,#38a169);margin-bottom:12px">+ Add Treatment Performed</button>
   ${plan.length?`<button class="btnS" onclick="clearTreatmentPlan('${mr}')" style="color:var(--red);border-color:rgba(229,62,62,.3);margin-bottom:12px">🗑 Clear Entire Plan</button>`:''}
 
   <div class="sec">Payments & Billing</div>
@@ -2499,6 +2577,10 @@ function openRxModal(mr) {
   document.getElementById('rxPulse').value = '';
   document.getElementById('rxTemp').value = '';
   document.getElementById('rxRR').value = '';
+  document.getElementById('rxTimeIn').value = String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+  document.getElementById('rxTimeOut').value = '';
+  document.getElementById('rxVCO').checked = false;
+  document.getElementById('rxRVC').checked = false;
   document.getElementById('rxAllergies').value = '';
   document.getElementById('rxComplaints').value = '';
   document.getElementById('rxHistory').value = '';
@@ -2588,6 +2670,10 @@ async function saveRx() {
     pulse: document.getElementById('rxPulse').value.trim(),
     temp: document.getElementById('rxTemp').value.trim(),
     rr: document.getElementById('rxRR').value.trim(),
+    timeIn: document.getElementById('rxTimeIn').value,
+    timeOut: document.getElementById('rxTimeOut').value,
+    vco: document.getElementById('rxVCO').checked,
+    rvc: document.getElementById('rxRVC').checked,
     allergies: document.getElementById('rxAllergies').value.trim(),
     complaints: document.getElementById('rxComplaints').value.trim(),
     history: document.getElementById('rxHistory').value.trim(),
@@ -2887,6 +2973,186 @@ function completeTpItem(mr,idx) {
     syncSheetField(mr, 'Treatment Plan JSON', JSON.stringify(TREATMENT_PLANS[mr]));
     refreshProfile(mr);
   }
+}
+
+// ═══════════════════════════════════════
+// TREATMENT PERFORMED — parallels Treatment Plan above, but tracks what
+// actually happened rather than what was proposed. Reuses the same
+// tooth-picker interaction pattern (kept as a separate copy rather than
+// a shared function, since Treatment Plan is working code already
+// depended on elsewhere — duplicating here avoids any risk of touching it).
+let curTpfMR = null;
+let tpfSelectedTeeth = [];
+let tpfAddedThisSession = [];
+
+function openTpfModal(mr) {
+  curTpfMR = mr;
+  const sel = document.getElementById('tpfProc');
+  sel.innerHTML = '<option value="">Select procedure</option>' + PRICES.map(p=>`<option value="${p.name}">${p.name} (PKR ${p.price.toLocaleString()})</option>`).join('');
+  const now = new Date();
+  document.getElementById('tpfDate').value = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+  document.getElementById('tpfTooth').value='';
+  document.getElementById('tpfCost').value='';
+  document.getElementById('tpfQty').value='1';
+  tpfSelectedTeeth=[];
+  tpfAddedThisSession=[];
+  renderTpfPicker();
+  renderTpfAddedList();
+  updateTpfLineTotal();
+  document.getElementById('tpfModal').classList.add('open');
+}
+function closeTpfModal(){ document.getElementById('tpfModal').classList.remove('open'); }
+
+function updateTpfLineTotal() {
+  const el = document.getElementById('tpfLineTotal');
+  if (!el) return;
+  const cost = parseFloat(document.getElementById('tpfCost').value)||0;
+  const qty = Math.max(1, parseFloat(document.getElementById('tpfQty').value)||1);
+  const total = cost*qty;
+  if (!cost) { el.textContent=''; return; }
+  el.textContent = 'Line total: PKR ' + total.toLocaleString() + (qty>1?' ('+qty+' × PKR '+cost.toLocaleString()+')':'');
+}
+
+function renderTpfPicker() {
+  const upper=['18','17','16','15','14','13','12','11','21','22','23','24','25','26','27','28'];
+  const lower=['48','47','46','45','44','43','42','41','31','32','33','34','35','36','37','38'];
+  const tH=(num)=>{
+    const sel=tpfSelectedTeeth.includes(num);
+    return `<div class="tooth" onclick="toggleTpfTooth('${num}')" style="background:${sel?'var(--teal)':'#fff'};border-color:${sel?'var(--teal)':'var(--border)'}"><span class="tS" style="color:${sel?'#fff':'#a0aec0'}">${sel?'✓':''}</span><span class="tN" style="color:${sel?'#fff':'#a0aec0'}">${num}</span></div>`;
+  };
+  const el=document.getElementById('tpfPicker');
+  if(!el) return;
+  el.innerHTML=`<div class="chartW" style="padding:10px 12px">
+    <div class="chartL">Upper — Right → Left</div>
+    <div class="tRow">${upper.map(tH).join('')}</div>
+    <div class="chartDiv"></div>
+    <div class="tRow">${lower.map(tH).join('')}</div>
+    <div class="chartL">Lower Jaw</div>
+    <div style="display:flex;gap:6px;margin-top:8px">
+      <button type="button" onclick="setTpfFullMouth()" style="flex:1;padding:7px;border-radius:8px;border:1.5px solid var(--border);background:#fff;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">Full Mouth</button>
+      <button type="button" onclick="clearTpfTeeth()" style="flex:1;padding:7px;border-radius:8px;border:1.5px solid var(--border);background:#fff;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--red)">Clear</button>
+    </div>
+  </div>`;
+}
+function toggleTpfTooth(num) {
+  const i=tpfSelectedTeeth.indexOf(num);
+  if(i>-1) tpfSelectedTeeth.splice(i,1); else tpfSelectedTeeth.push(num);
+  tpfSelectedTeeth.sort();
+  document.getElementById('tpfTooth').value=tpfSelectedTeeth.join(', ');
+  const qtyEl = document.getElementById('tpfQty');
+  if (qtyEl) qtyEl.value = Math.max(1, tpfSelectedTeeth.length);
+  renderTpfPicker();
+  updateTpfLineTotal();
+}
+function setTpfFullMouth() {
+  tpfSelectedTeeth=[];
+  document.getElementById('tpfTooth').value='Full Mouth';
+  renderTpfPicker();
+  updateTpfLineTotal();
+}
+function clearTpfTeeth() {
+  tpfSelectedTeeth=[];
+  document.getElementById('tpfTooth').value='';
+  const qtyEl = document.getElementById('tpfQty');
+  if (qtyEl) qtyEl.value = '1';
+  renderTpfPicker();
+  updateTpfLineTotal();
+}
+function fillTpfCost(procName) {
+  const pr=PRICES.find(p=>p.name===procName);
+  if(pr) document.getElementById('tpfCost').value=pr.price;
+  updateTpfLineTotal();
+}
+function renderTpfAddedList() {
+  const el = document.getElementById('tpfAddedList');
+  if (!el) return;
+  if (!tpfAddedThisSession.length) { el.innerHTML=''; return; }
+  el.innerHTML = '<div style="background:rgba(75,191,176,.08);border:1px solid rgba(75,191,176,.25);border-radius:10px;padding:8px 10px;margin-bottom:10px;font-size:11px;color:var(--teal-d)"><strong>Added so far:</strong> ' + tpfAddedThisSession.join(', ') + '</div>';
+}
+function resetTpfFormFields() {
+  document.getElementById('tpfTooth').value='';
+  document.getElementById('tpfProc').value='';
+  document.getElementById('tpfCost').value='';
+  document.getElementById('tpfQty').value='1';
+  tpfSelectedTeeth=[];
+  renderTpfPicker();
+  updateTpfLineTotal();
+}
+
+function commitTpfItem() {
+  const tooth=document.getElementById('tpfTooth').value.trim();
+  const proc=document.getElementById('tpfProc').value;
+  const cost=document.getElementById('tpfCost').value;
+  const qty=Math.max(1, parseFloat(document.getElementById('tpfQty').value)||1);
+  const date=document.getElementById('tpfDate').value;
+  if(!proc) return false;
+  if(!TREATMENT_PERFORMED[curTpfMR]) TREATMENT_PERFORMED[curTpfMR]=[];
+  TREATMENT_PERFORMED[curTpfMR].push({
+    tooth, proc,
+    cost: parseFloat(cost)||0,
+    qty: qty,
+    status: 'Pending',
+    date: date ? new Date(date+'T12:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})
+  });
+  localStorage.setItem('smilehub_performed', JSON.stringify(TREATMENT_PERFORMED));
+  syncSheetField(curTpfMR, 'Treatment Performed JSON', JSON.stringify(TREATMENT_PERFORMED[curTpfMR]));
+  tpfAddedThisSession.push(proc + (tooth?' (Tooth '+tooth+')':'') + (qty>1?' ×'+qty:''));
+  return true;
+}
+
+function addAnotherTpfItem() {
+  const proc=document.getElementById('tpfProc').value;
+  if(!proc){ alert('Please select a procedure'); return; }
+  commitTpfItem();
+  resetTpfFormFields();
+  renderTpfAddedList();
+}
+
+function finishTpfModal() {
+  const proc=document.getElementById('tpfProc').value;
+  if (proc) commitTpfItem();
+  tpfAddedThisSession=[];
+  closeTpfModal();
+  refreshProfile(curTpfMR);
+}
+
+function deleteTpfItem(mr, idx) {
+  if(TREATMENT_PERFORMED[mr]){
+    TREATMENT_PERFORMED[mr].splice(idx,1);
+    localStorage.setItem('smilehub_performed', JSON.stringify(TREATMENT_PERFORMED));
+    syncSheetField(mr, 'Treatment Performed JSON', JSON.stringify(TREATMENT_PERFORMED[mr]));
+    refreshProfile(mr);
+  }
+}
+
+// Marking a performed item "Done" is the moment everything cascades:
+// it logs into the patient's history (Procedural Notes) and opens the
+// existing Payment screen pre-filled with this procedure's charge —
+// staff confirm/adjust the amount actually paid rather than it being
+// silently auto-billed with no review step.
+function markTpfDone(mr, idx) {
+  const item = TREATMENT_PERFORMED[mr] && TREATMENT_PERFORMED[mr][idx];
+  if (!item) return;
+  item.status = 'Done';
+  localStorage.setItem('smilehub_performed', JSON.stringify(TREATMENT_PERFORMED));
+  syncSheetField(mr, 'Treatment Performed JSON', JSON.stringify(TREATMENT_PERFORMED[mr]));
+
+  const p = PATIENTS.find(x=>getMR(x)===mr);
+  if (p) {
+    const dateShort = new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short'});
+    const line = dateShort + ': [' + item.proc + (item.tooth?' · Tooth '+item.tooth:'') + '] Marked as performed';
+    const existing = f(p,'Procedural Notes');
+    const newNotes = (existing?existing+'\n':'')+line;
+    p['Procedural Notes'] = newNotes;
+    const url = `${SCRIPT_URL}?action=update&mr=${encodeURIComponent(mr)}&field=${encodeURIComponent('Procedural Notes')}&value=${encodeURIComponent(newNotes)}`;
+    fetch(url).then(r=>r.json()).then(d=>{ if(!d.success) console.warn('Notes save failed:', d.error); }).catch(e=>console.error('Notes save error:', e));
+  }
+
+  refreshProfile(mr);
+  openPayModal(mr);
+  document.getElementById('payProc').value = item.proc;
+  document.getElementById('payCharged').value = (parseFloat(item.cost)||0) * (parseFloat(item.qty)||1);
+  document.getElementById('payDiscount').value = '0';
 }
 function deleteTpItem(mr,idx) {
   if(TREATMENT_PLANS[mr]){
@@ -4598,14 +4864,24 @@ function closePayModal(){document.getElementById('payModal').classList.remove('o
 // general contact details used elsewhere in the app.
 function buildPrescriptionHTML(p, rx) {
   const name = f(p,'Patient Name');
+  const mr = getMR(p);
+  const medAlert = getMed(p);
+  const nextRecall = f(p,'Next Appointment');
   const doc = DOCTORS_INFO[rx.doctor] || DOCTORS_INFO['Dr. Abdullah'];
   const dateLabel = new Date(rx.date+'T12:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
-  const timeLabel = rx.time ? (() => {
-    const [h,m] = rx.time.split(':').map(Number);
+  const fmtT = (hhmm) => {
+    if (!hhmm) return '';
+    const [h,m] = hhmm.split(':').map(Number);
     const h12 = h%12||12, ap = h>=12?'PM':'AM';
     return h12+':'+String(m).padStart(2,'0')+' '+ap;
-  })() : '';
+  };
+  const timeLabel = fmtT(rx.time);
   const ord = rx.visitNo===1?'1st':rx.visitNo===2?'2nd':rx.visitNo===3?'3rd':rx.visitNo+'th';
+
+  // Procedures marked "Done" the same day this prescription is dated —
+  // pulled automatically so nothing needs re-entering on the Rx form.
+  const performedToday = (TREATMENT_PERFORMED[mr]||[]).filter(item => item.status==='Done' && item.date===dateLabel);
+  const performedLine = performedToday.length ? performedToday.map(item => item.proc + (item.tooth?' (Tooth '+item.tooth+')':'')).join(', ') : '';
 
   const medRows = rx.medications.map((m,i) => `
     <div class="rx-item">
@@ -4623,18 +4899,20 @@ function buildPrescriptionHTML(p, rx) {
   .rx-sheet{max-width:800px;margin:0 auto}
   .bar-green{height:8px;background:#3aa967}
   .bar-blue{height:8px;background:#1B3F6B}
-  .rx-header{display:flex;justify-content:space-between;align-items:flex-start;padding:18px 24px 14px;position:relative}
+  .rx-header-top{padding:14px 24px 2px;position:relative;text-align:center}
+  .clinic-name{font-size:28px;font-weight:600;color:#1a1a1a;line-height:1}
+  .ref-no{position:absolute;top:6px;right:24px;font-size:10px;color:#333}
+  .rx-header-row{display:flex;justify-content:space-between;align-items:center;padding:8px 24px 12px;gap:14px}
   .clinic-block{display:flex;align-items:center;gap:12px}
-  .clinic-block img{height:56px}
-  .clinic-name{font-size:30px;font-weight:600;color:#1a1a1a;line-height:1}
-  .clinic-sub{font-size:11px;color:#444;margin-top:4px;line-height:1.6}
-  .doc-name{font-size:16px;font-weight:700;color:#1a1a1a}
-  .doc-sub{font-size:11.5px;color:#333;margin-top:2px;line-height:1.5}
-  .ref-no{position:absolute;top:8px;right:24px;font-size:10px;color:#333}
-  .qr-row{display:flex;justify-content:flex-end;align-items:center;gap:10px;padding:0 24px 10px;margin-top:-6px}
-  .qr-row img{height:70px;width:70px}
-  .urdu-slogan{font-size:13px;color:#1a1a1a;direction:rtl}
+  .clinic-block img{height:50px}
+  .clinic-sub{font-size:11px;color:#444;line-height:1.6}
+  .doc-side{display:flex;align-items:center;gap:10px}
+  .doc-name{font-size:16px;font-weight:700;color:#1a1a1a;text-align:right}
+  .doc-sub{font-size:11.5px;color:#333;margin-top:2px;line-height:1.5;text-align:right}
+  .qr-row img{height:64px;width:64px}
+  .urdu-slogan{font-size:13px;color:#1a1a1a;direction:rtl;text-align:right;margin-top:4px}
   .red-bar{height:5px;background:#e0342a}
+  .med-alert-band{background:#fff0f0;border-top:1px solid #f0c8c8;border-bottom:1px solid #f0c8c8;padding:8px 24px;font-size:12.5px;font-weight:700;color:#c0202a}
   .patient-band{background:#eceff1;padding:12px 24px;display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;font-size:12.5px}
   .patient-band .row{display:flex;gap:6px;border-bottom:1px dotted #b0b8bd;padding:3px 0}
   .patient-band .lbl{color:#333;white-space:nowrap}
@@ -4644,9 +4922,11 @@ function buildPrescriptionHTML(p, rx) {
   .clinical-col .item{margin-bottom:16px}
   .clinical-col .item b{display:block;font-size:11.5px;color:#1a1a1a;margin-bottom:3px}
   .clinical-col .item .fill{color:#555;min-height:14px}
-  .dispensing-box{border:1px dashed #aaa;color:#999;font-size:10px;text-align:center;padding:8px;margin-top:30px;border-radius:4px}
+  .consc-row{display:flex;gap:14px;font-size:11px;margin-bottom:16px}
+  .consc-row span{display:flex;align-items:center;gap:4px}
+  .dispensing-box{border:1px dashed #aaa;color:#999;font-size:10px;text-align:center;padding:8px;margin-top:16px;border-radius:4px}
   .rx-col{padding:16px 24px}
-  .top-line{display:flex;gap:24px;font-size:12.5px;margin-bottom:6px}
+  .top-line{display:flex;gap:24px;font-size:12.5px;margin-bottom:6px;flex-wrap:wrap}
   .diag-line{font-size:12.5px;margin-bottom:14px;padding-bottom:8px;border-bottom:1px dotted #b0b8bd}
   .rx-mark{font-size:22px;font-style:italic;color:#555;font-family:Georgia,serif;margin-bottom:8px}
   .rx-item{margin-bottom:14px}
@@ -4659,33 +4939,36 @@ function buildPrescriptionHTML(p, rx) {
   .refill{font-weight:700}
   .refill span{font-weight:400;margin-left:8px}
   .footer-right{text-align:right;color:#444}
+  .recall-line{font-size:11px;color:#333}
   @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style></head><body>
 <div class="rx-sheet">
   <div class="bar-green"></div>
-  <div class="rx-header">
+  <div class="rx-header-top">
     <div class="ref-no">Ref. No. ${rx.refNo}</div>
+    <div class="clinic-name">Smile Hub Clinics</div>
+  </div>
+  <div class="rx-header-row">
     <div class="clinic-block">
       <img src="${SH_LOGO_B64}" alt="logo">
+      <div class="clinic-sub">599 Block Q, Johar Town, Lahore &nbsp;·&nbsp; 0303 5995990<br>
+      PHC Reg. No. R-87707</div>
+    </div>
+    <div class="doc-side">
       <div>
-        <div class="clinic-name">Smile Hub Clinics</div>
-        <div class="clinic-sub">599 Block Q, Johar Town, Lahore &nbsp;·&nbsp; 0303 5995990<br>
-        PHC Reg. No. R-87707</div>
+        <div class="doc-name">${doc.full}</div>
+        <div class="doc-sub">PM&amp;DC# ${doc.pmdc} &nbsp;|&nbsp; ${doc.qual}${doc.spec?'<br>'+doc.spec:''}</div>
+        <div class="urdu-slogan">علاج ہمیشہ مستند معالج سے کرائیں</div>
       </div>
+      <img src="${SH_QR_B64}" alt="QR" style="height:64px;width:64px">
     </div>
-  </div>
-  <div class="qr-row">
-    <div style="text-align:right">
-      <div class="doc-name">${doc.full}</div>
-      <div class="doc-sub">PM&amp;DC# ${doc.pmdc} &nbsp;|&nbsp; ${doc.qual}${doc.spec?'<br>'+doc.spec:''}</div>
-      <div class="urdu-slogan" style="margin-top:6px">علاج ہمیشہ مستند معالج سے کرائیں</div>
-    </div>
-    <img src="${SH_QR_B64}" alt="QR">
   </div>
   <div class="red-bar"></div>
+  ${medAlert ? `<div class="med-alert-band">⚠ MEDICAL ALERT: ${medAlert}</div>` : ''}
 
   <div class="patient-band">
     <div class="row"><span class="lbl">Patient Name:</span><span class="val">${name}</span></div>
+    <div class="row"><span class="lbl">MR Number:</span><span class="val">${mr}</span></div>
     <div class="row"><span class="lbl">S/o, D/o, W/o:</span><span class="val">${rx.parent||'—'}</span></div>
     <div class="row"><span class="lbl">No. of Visit:</span><span class="val">${ord}</span></div>
     <div class="row"><span class="lbl">Time:</span><span class="val">${timeLabel||'—'}</span></div>
@@ -4713,9 +4996,19 @@ function buildPrescriptionHTML(p, rx) {
         <span>Gender: <b>${rx.gender||'—'}</b></span>
         <span>Weight (kg): <b>${rx.weight||'—'}</b></span>
       </div>
+      <div class="top-line">
+        <span>Time In: <b>${fmtT(rx.timeIn)||'—'}</b></span>
+        <span>Time Out: <b>${fmtT(rx.timeOut)||'—'}</b></span>
+      </div>
+      <div class="consc-row">
+        <span>${rx.vco?'☑':'☐'} Verbal Consent Obtained (VCO)</span>
+        <span>${rx.rvc?'☑':'☐'} Responding to Verbal Commands</span>
+      </div>
       <div class="diag-line">Provisional/Diagnosis: ${rx.diagnosis||'—'}</div>
+      ${performedLine ? `<div class="diag-line">Procedure(s) Performed Today: <b>${performedLine}</b></div>` : ''}
       <div class="rx-mark">℞</div>
       ${medRows}
+      ${nextRecall ? `<div class="recall-line">Next Recall: <b>${nextRecall}</b></div>` : ''}
       <div class="sig-area">
         <div class="sig-line">(Signature &amp; Stamp)</div>
       </div>
@@ -5131,6 +5424,13 @@ function downloadPatientRecord(mr, mode) {
   const payHTML = payGrouped.length ? payGrouped.map(g=>{
     return `<tr><td style="font-weight:600">${g.proc}${g.teeth?` <span style="color:#9aa5b1;font-weight:400">· Tooth ${g.teeth}</span>`:''}</td><td class="doc-num">PKR ${Math.round(g.unitPrice).toLocaleString()}</td><td class="doc-center">${g.qty}</td><td class="doc-num${g.discount>0?' neg':''}">${g.discount>0?'−'+g.discount.toLocaleString():'—'}</td><td class="doc-num" style="color:#38a169;font-weight:600">PKR ${g.payable.toLocaleString()}</td></tr>`;}).join('') : '<tr><td colspan="5" style="text-align:center;color:#9aa5b1">No payments recorded</td></tr>';
 
+  const rxList = PRESCRIPTIONS[mr]||[];
+  const rxHTML = rxList.length ? rxList.slice().reverse().map(rx=>{
+    const rxDateLabel = new Date(rx.date+'T12:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+    const medNames = rx.medications.map(m=>m.med).join('; ') || '—';
+    return `<tr><td style="white-space:nowrap">${rxDateLabel}</td><td>${rx.doctor}</td><td>${rx.diagnosis||'—'}</td><td>${medNames}</td></tr>`;
+  }).join('') : '<tr><td colspan="4" style="text-align:center;color:#9aa5b1">No prescriptions recorded</td></tr>';
+
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Patient Record - ${name}</title>
   <style>${PDF_DOC_STYLE}</style></head><body>
   ${pdfHeaderHTML('Patient Record', true, pdfDocId('REC', mr))}
@@ -5151,6 +5451,9 @@ function downloadPatientRecord(mr, mode) {
 
   <div class="doc-section-label">Treatment History</div>
   <table class="doc-table"><thead><tr><th>Date</th><th>Procedure / Notes</th></tr></thead><tbody>${notesHTML}</tbody></table>
+
+  <div class="doc-section-label">Prescriptions</div>
+  <table class="doc-table"><thead><tr><th>Date</th><th>Doctor</th><th>Diagnosis</th><th>Medications</th></tr></thead><tbody>${rxHTML}</tbody></table>
 
   <div class="doc-section-label">Treatment Plan</div>
   <table class="doc-table"><thead><tr><th>Procedure</th><th>Tooth</th><th class="doc-num">Unit Price</th><th class="doc-center">Qty</th><th class="doc-num">Discount</th><th class="doc-num">Payable</th></tr></thead><tbody>${planHTML}</tbody></table>
@@ -5382,7 +5685,7 @@ window.addEventListener('load', () => {
   }, 100);
 });
 
-['srchModal','toothModal','editModal','noteModal','tpModal','priceModal','addPriceModal','invModal','addInvModal','delModal','delApptModal','editApptModal','payModal','labModal','ptModal','labBillingModal','botModal','reminderModal','recallModal','nextApptModal','manageListModal','rxModal','visitDateModal','outcomeModal'].forEach(id=>{
+['srchModal','toothModal','editModal','noteModal','tpModal','priceModal','addPriceModal','invModal','addInvModal','delModal','delApptModal','editApptModal','payModal','labModal','ptModal','labBillingModal','botModal','reminderModal','recallModal','nextApptModal','manageListModal','rxModal','visitDateModal','outcomeModal','tpfModal'].forEach(id=>{
   document.getElementById(id).addEventListener('click',function(e){if(e.target===this)this.classList.remove('open');});
 });
 </script>
