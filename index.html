@@ -455,6 +455,11 @@ html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;pos
 
   <!-- PRICE LIST -->
   <div class="scr" id="s-prices">
+    <div class="sec">Prescription Lists</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Used by the medication and diagnosis dropdowns when writing prescriptions</div>
+    <button class="btnS" onclick="openManageList('medications')">💊 Manage Medications</button>
+    <button class="btnS" onclick="openManageList('diagnoses')">🩺 Manage Diagnoses</button>
+
     <div class="sec">Clinic Price List</div>
     <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Tap any procedure to edit price</div>
     <div id="priceList"></div>
