@@ -710,11 +710,21 @@ html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;pos
     </div>
 
     <div class="sec">Clinical Notes</div>
-    <div class="fG"><label class="fL">Allergies</label><input class="fI" id="rxAllergies" placeholder="None reported"></div>
-    <div class="fG"><label class="fL">Presenting Complaints</label><input class="fI" id="rxComplaints"></div>
-    <div class="fG"><label class="fL">History</label><input class="fI" id="rxHistory"></div>
-    <div class="fG"><label class="fL">Findings</label><input class="fI" id="rxFindings"></div>
-    <div class="fG"><label class="fL">Investigations</label><input class="fI" id="rxInvestigations"></div>
+    <div class="fG"><label class="fL">Allergies <span onclick="openManageList('allergies')" style="font-size:9px;color:var(--teal-d);font-weight:400;text-transform:none;letter-spacing:0;text-decoration:underline;cursor:pointer">manage list</span></label>
+      <input class="fI" list="rxAllergiesList" id="rxAllergies" placeholder="None reported"><datalist id="rxAllergiesList"></datalist>
+    </div>
+    <div class="fG"><label class="fL">Presenting Complaints <span onclick="openManageList('complaints')" style="font-size:9px;color:var(--teal-d);font-weight:400;text-transform:none;letter-spacing:0;text-decoration:underline;cursor:pointer">manage list</span></label>
+      <input class="fI" list="rxComplaintsList" id="rxComplaints"><datalist id="rxComplaintsList"></datalist>
+    </div>
+    <div class="fG"><label class="fL">History <span onclick="openManageList('history')" style="font-size:9px;color:var(--teal-d);font-weight:400;text-transform:none;letter-spacing:0;text-decoration:underline;cursor:pointer">manage list</span></label>
+      <input class="fI" list="rxHistoryList" id="rxHistory"><datalist id="rxHistoryList"></datalist>
+    </div>
+    <div class="fG"><label class="fL">Findings <span onclick="openManageList('findings')" style="font-size:9px;color:var(--teal-d);font-weight:400;text-transform:none;letter-spacing:0;text-decoration:underline;cursor:pointer">manage list</span></label>
+      <input class="fI" list="rxFindingsList" id="rxFindings"><datalist id="rxFindingsList"></datalist>
+    </div>
+    <div class="fG"><label class="fL">Investigations <span onclick="openManageList('investigations')" style="font-size:9px;color:var(--teal-d);font-weight:400;text-transform:none;letter-spacing:0;text-decoration:underline;cursor:pointer">manage list</span></label>
+      <input class="fI" list="rxInvestigationsList" id="rxInvestigations"><datalist id="rxInvestigationsList"></datalist>
+    </div>
     <div class="fG"><label class="fL">Provisional / Diagnosis <span onclick="openManageList('diagnoses')" style="font-size:9px;color:var(--teal-d);font-weight:400;text-transform:none;letter-spacing:0;text-decoration:underline;cursor:pointer">manage list</span></label>
       <input class="fI" list="rxDiagList" id="rxDiagnosis" placeholder="Select or type a diagnosis">
       <datalist id="rxDiagList"></datalist>
@@ -723,8 +733,12 @@ html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;pos
     <div class="sec">℞ Medications</div>
     <div id="rxMedBody"></div>
     <button class="btnS" onclick="addRxMedRow()" style="margin-top:0;margin-bottom:4px">➕ Add Medication</button>
-    <div style="font-size:10px;color:var(--muted);margin-bottom:10px">Select or type a medication name. <span onclick="openManageList('medications')" style="color:var(--teal-d);text-decoration:underline;cursor:pointer">manage list</span></div>
+    <div style="font-size:10px;color:var(--muted);margin-bottom:10px">Select or type. Manage lists: <span onclick="openManageList('medications')" style="color:var(--teal-d);text-decoration:underline;cursor:pointer">medications</span> · <span onclick="openManageList('dosages')" style="color:var(--teal-d);text-decoration:underline;cursor:pointer">dosages</span> · <span onclick="openManageList('frequencies')" style="color:var(--teal-d);text-decoration:underline;cursor:pointer">frequencies</span> · <span onclick="openManageList('durations')" style="color:var(--teal-d);text-decoration:underline;cursor:pointer">durations</span> · <span onclick="openManageList('instructions')" style="color:var(--teal-d);text-decoration:underline;cursor:pointer">instructions</span></div>
     <datalist id="rxMedList"></datalist>
+    <datalist id="rxDosageList"></datalist>
+    <datalist id="rxFrequencyList"></datalist>
+    <datalist id="rxDurationList"></datalist>
+    <datalist id="rxInstructionsList"></datalist>
 
     <div class="fG"><label class="fL">Refill</label>
       <select class="fS" id="rxRefill"><option value="0">0 — No refills</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select>
@@ -1414,6 +1428,23 @@ const DEFAULT_DIAGNOSES = [
   'Malocclusion',
 ];
 
+// All remaining prescription-form fields that benefit from quick-select
+// dropdowns — consolidated into ONE object/ONE sheet column rather than
+// nine separate ones, since each additional standalone column has proven
+// to be an easy place for a sync mismatch to creep in.
+let RX_LISTS = {};
+const DEFAULT_RX_LISTS = {
+  allergies: ['None reported', 'NKDA (No Known Drug Allergies)', 'Penicillin', 'Sulfa drugs', 'Latex', 'Local anesthetic (specify)', 'Aspirin/NSAIDs'],
+  complaints: ['Pain', 'Swelling', 'Sensitivity to hot/cold', 'Bleeding gums', 'Broken tooth', 'Loose tooth', 'Bad breath', 'Difficulty chewing', 'Jaw pain', 'Post-operative pain'],
+  history: ['No relevant medical history', 'Diabetic', 'Hypertensive', 'Cardiac patient', 'Pregnant', 'On blood thinners', 'Previous dental treatment uneventful'],
+  findings: ['Deep caries', 'Periapical abscess', 'Gingival inflammation', 'Calculus deposits', 'Fractured tooth', 'Mobile tooth', 'Impacted tooth', 'Missing tooth', 'Root stump'],
+  investigations: ['IOPA X-ray advised', 'OPG advised', 'CBCT advised', 'Blood sugar test advised', 'Vitality test performed', 'None required'],
+  dosages: ['1 tablet', '2 tablets', '1 capsule', '5 ml', '10 ml', '1/2 tablet'],
+  frequencies: ['Once daily', 'Twice daily', 'Three times daily', 'Every 8 hours', 'Every 12 hours', 'As needed (SOS)', 'Before breakfast', 'After meals'],
+  durations: ['3 days', '5 days', '7 days', '10 days', '14 days', 'Until finished', 'Continue till follow-up'],
+  instructions: ['Take after food', 'Take on empty stomach', 'Avoid driving', 'Take at night', 'Avoid alcohol', 'Complete the full course', 'Discontinue if rash occurs and report back']
+};
+
 // ═══════════════════════════════════════
 // AUTH
 // ═══════════════════════════════════════
@@ -1471,6 +1502,35 @@ function signOut() {
   localStorage.removeItem('smilehub_token');
   localStorage.removeItem('smilehub_token_expiry');
   google.accounts.oauth2.revoke(token, () => location.reload());
+}
+
+// Silently requests a fresh access token before the current one expires,
+// using prompt:'' so it relies on the existing Google session rather than
+// showing a consent screen. This was previously called but never defined —
+// meaning tokens just expired after 55 minutes with nothing to catch it,
+// surfacing as a confusing "invalid authentication credentials" error on
+// whatever action happened to run next.
+function silentRefresh() {
+  try {
+    const client = google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT_ID, scope: SCOPES,
+      callback: r => {
+        if (r.error) {
+          console.warn('Silent token refresh failed:', r.error, '— will need a manual sign-in on next action.');
+          return;
+        }
+        token = r.access_token;
+        const expiry = Date.now() + 55 * 60 * 1000;
+        localStorage.setItem('smilehub_token', token);
+        localStorage.setItem('smilehub_token_expiry', expiry);
+        console.log('✅ Token silently refreshed');
+        setTimeout(silentRefresh, 50 * 60 * 1000);
+      }
+    });
+    client.requestAccessToken({ prompt: '' });
+  } catch(e) {
+    console.error('Silent refresh error:', e);
+  }
 }
 
 // Auto-login on page load if valid token exists
@@ -1535,6 +1595,9 @@ async function initApp() {
   const savedDiags = localStorage.getItem('smilehub_diagnoses');
   DIAGNOSES = savedDiags ? JSON.parse(savedDiags) : [...DEFAULT_DIAGNOSES];
 
+  const savedRxLists = localStorage.getItem('smilehub_rxlists');
+  RX_LISTS = savedRxLists ? { ...DEFAULT_RX_LISTS, ...JSON.parse(savedRxLists) } : { ...DEFAULT_RX_LISTS };
+
   document.getElementById('syncBar').innerHTML = '<div class="syncBar"><div class="sp"></div>Syncing...</div>';
 
   try {
@@ -1596,6 +1659,13 @@ async function initApp() {
           DIAGNOSES = JSON.parse(diagJson);
           localStorage.setItem('smilehub_diagnoses', JSON.stringify(DIAGNOSES));
         } catch(e) { console.error('Diagnoses parse error:', e); }
+      }
+      const rxListsJson = f(settingsRow, 'Rx Lists JSON');
+      if (rxListsJson) {
+        try {
+          RX_LISTS = { ...DEFAULT_RX_LISTS, ...JSON.parse(rxListsJson) };
+          localStorage.setItem('smilehub_rxlists', JSON.stringify(RX_LISTS));
+        } catch(e) { console.error('Rx Lists parse error:', e); }
       }
       PATIENTS = PATIENTS.filter(p => getMR(p) !== 'CLINIC_SETTINGS');
     }
@@ -1722,7 +1792,7 @@ async function addCalEvent(summary, startISO, endISO, desc, doctor) {
       if (errBody && errBody.error && errBody.error.message) errMsg = errBody.error.message;
     } catch(parseErr) {}
     console.error('addCalEvent failed:', r.status, errMsg, 'calendar:', calId);
-    return { ok: false, error: errMsg };
+    return { ok: false, error: errMsg, isAuthError: r.status === 401 };
   } catch(e) {
     console.error('addCalEvent network error:', e);
     return { ok: false, error: e.message };
@@ -2475,16 +2545,43 @@ async function saveNextAppt() {
     closeNextApptModal();
     await initApp();
     refreshProfile(mr);
+  } else if (result.isAuthError) {
+    alert('⚠ Your sign-in session has expired.\n\nNothing was scheduled — please refresh the page and sign in again, then try once more.');
   } else {
     alert('⚠ Could not schedule: ' + (result.error||'unknown error'));
   }
 }
 
-let curManageListType = null; // 'medications' or 'diagnoses'
+let curManageListType = null; // one of RX_LIST_META's keys below
+
+// Central registry of every manageable prescription list. Medications and
+// Diagnoses keep their existing top-level variables and columns exactly as
+// they already work — everything else routes through the single RX_LISTS
+// object and its one shared column, added so nine new fields didn't mean
+// nine new places for a sync mismatch to happen.
+const RX_LIST_META = {
+  medications:    { title: 'Manage Medications' },
+  diagnoses:      { title: 'Manage Diagnoses' },
+  allergies:      { title: 'Manage Allergies' },
+  complaints:     { title: 'Manage Presenting Complaints' },
+  history:        { title: 'Manage History Entries' },
+  findings:       { title: 'Manage Findings' },
+  investigations: { title: 'Manage Investigations' },
+  dosages:        { title: 'Manage Dosages' },
+  frequencies:    { title: 'Manage Frequencies' },
+  durations:      { title: 'Manage Durations' },
+  instructions:   { title: 'Manage Instructions' }
+};
+
+function getManageListArray(type) {
+  if (type === 'medications') return MEDICATIONS;
+  if (type === 'diagnoses') return DIAGNOSES;
+  return RX_LISTS[type];
+}
 
 function openManageList(type) {
   curManageListType = type;
-  document.getElementById('manageListTitle').textContent = type === 'medications' ? 'Manage Medications' : 'Manage Diagnoses';
+  document.getElementById('manageListTitle').textContent = (RX_LIST_META[type]||{}).title || 'Manage List';
   document.getElementById('manageListNewItem').value = '';
   renderManageListItems();
   document.getElementById('manageListModal').classList.add('open');
@@ -2498,7 +2595,7 @@ function closeManageListModal() {
 }
 
 function renderManageListItems() {
-  const list = curManageListType === 'medications' ? MEDICATIONS : DIAGNOSES;
+  const list = getManageListArray(curManageListType) || [];
   const el = document.getElementById('manageListItems');
   el.innerHTML = list.length ? list.map((item,idx) => `
     <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:8px 12px;margin-bottom:6px;font-size:12.5px">
@@ -2510,7 +2607,8 @@ function renderManageListItems() {
 function addManageListItem() {
   const val = document.getElementById('manageListNewItem').value.trim();
   if (!val) return;
-  const list = curManageListType === 'medications' ? MEDICATIONS : DIAGNOSES;
+  const list = getManageListArray(curManageListType);
+  if (!list) return;
   if (list.some(x => x.toLowerCase() === val.toLowerCase())) { alert('Already in the list'); return; }
   list.push(val);
   document.getElementById('manageListNewItem').value = '';
@@ -2519,28 +2617,46 @@ function addManageListItem() {
 }
 
 function deleteManageListItem(idx) {
-  const list = curManageListType === 'medications' ? MEDICATIONS : DIAGNOSES;
+  const list = getManageListArray(curManageListType);
+  if (!list) return;
   list.splice(idx, 1);
   renderManageListItems();
   saveManageList();
 }
 
 function saveManageList() {
-  const field = curManageListType === 'medications' ? 'Medications JSON' : 'Diagnoses JSON';
-  const list = curManageListType === 'medications' ? MEDICATIONS : DIAGNOSES;
-  const key = curManageListType === 'medications' ? 'smilehub_medications' : 'smilehub_diagnoses';
-  localStorage.setItem(key, JSON.stringify(list));
-  syncSheetField('CLINIC_SETTINGS', field, JSON.stringify(list));
+  const type = curManageListType;
+  if (type === 'medications') {
+    localStorage.setItem('smilehub_medications', JSON.stringify(MEDICATIONS));
+    syncSheetField('CLINIC_SETTINGS', 'Medications JSON', JSON.stringify(MEDICATIONS));
+  } else if (type === 'diagnoses') {
+    localStorage.setItem('smilehub_diagnoses', JSON.stringify(DIAGNOSES));
+    syncSheetField('CLINIC_SETTINGS', 'Diagnoses JSON', JSON.stringify(DIAGNOSES));
+  } else {
+    localStorage.setItem('smilehub_rxlists', JSON.stringify(RX_LISTS));
+    syncSheetField('CLINIC_SETTINGS', 'Rx Lists JSON', JSON.stringify(RX_LISTS));
+  }
 }
 
 let curRxMR = null;
 let rxMedIdx = 0;
 
 function populateRxDatalists() {
-  const medList = document.getElementById('rxMedList');
-  const diagList = document.getElementById('rxDiagList');
-  if (medList) medList.innerHTML = MEDICATIONS.map(m => `<option value="${m.replace(/"/g,'')}">`).join('');
-  if (diagList) diagList.innerHTML = DIAGNOSES.map(d => `<option value="${d.replace(/"/g,'')}">`).join('');
+  const setOpts = (id, arr) => {
+    const el = document.getElementById(id);
+    if (el && arr) el.innerHTML = arr.map(v => `<option value="${v.replace(/"/g,'')}">`).join('');
+  };
+  setOpts('rxMedList', MEDICATIONS);
+  setOpts('rxDiagList', DIAGNOSES);
+  setOpts('rxAllergiesList', RX_LISTS.allergies);
+  setOpts('rxComplaintsList', RX_LISTS.complaints);
+  setOpts('rxHistoryList', RX_LISTS.history);
+  setOpts('rxFindingsList', RX_LISTS.findings);
+  setOpts('rxInvestigationsList', RX_LISTS.investigations);
+  setOpts('rxDosageList', RX_LISTS.dosages);
+  setOpts('rxFrequencyList', RX_LISTS.frequencies);
+  setOpts('rxDurationList', RX_LISTS.durations);
+  setOpts('rxInstructionsList', RX_LISTS.instructions);
 }
 
 function updateRxVisitNote() {
@@ -2614,12 +2730,12 @@ function addRxMedRow(vals) {
       <button type="button" onclick="document.getElementById('${id}').remove()" style="width:34px;flex-shrink:0;border-radius:8px;border:none;background:rgba(229,62,62,.1);color:var(--red);font-size:14px;cursor:pointer">✕</button>
     </div>
     <div class="fR" style="margin-bottom:6px">
-      <input class="fI" placeholder="Dosage (e.g. 1 tablet)" value="${vals?(vals.dose||'').replace(/"/g,''):''}">
-      <input class="fI" placeholder="Frequency (e.g. every 12 hrs)" value="${vals?(vals.freq||'').replace(/"/g,''):''}">
+      <input class="fI" list="rxDosageList" placeholder="Dosage (e.g. 1 tablet)" value="${vals?(vals.dose||'').replace(/"/g,''):''}">
+      <input class="fI" list="rxFrequencyList" placeholder="Frequency (e.g. every 12 hrs)" value="${vals?(vals.freq||'').replace(/"/g,''):''}">
     </div>
     <div class="fR" style="margin-bottom:6px">
-      <input class="fI" placeholder="Duration (e.g. 5 days)" value="${vals?(vals.dur||'').replace(/"/g,''):''}">
-      <input class="fI" placeholder="Instructions (e.g. after food)" value="${vals?(vals.instr||'').replace(/"/g,''):''}">
+      <input class="fI" list="rxDurationList" placeholder="Duration (e.g. 5 days)" value="${vals?(vals.dur||'').replace(/"/g,''):''}">
+      <input class="fI" list="rxInstructionsList" placeholder="Instructions (e.g. after food)" value="${vals?(vals.instr||'').replace(/"/g,''):''}">
     </div>`;
   body.appendChild(div);
 }
@@ -2700,6 +2816,33 @@ async function saveRx() {
   });
   localStorage.setItem('smilehub_medications', JSON.stringify(MEDICATIONS));
   syncSheetField('CLINIC_SETTINGS', 'Medications JSON', JSON.stringify(MEDICATIONS));
+
+  // Same auto-grow behavior for the other 9 fields, but since they all
+  // share one object/column, only one sync call is needed regardless of
+  // how many of them picked up a new value this time.
+  let rxListsChanged = false;
+  const grow = (category, value) => {
+    if (!value) return;
+    if (!RX_LISTS[category].some(x => x.toLowerCase() === value.toLowerCase())) {
+      RX_LISTS[category].push(value);
+      rxListsChanged = true;
+    }
+  };
+  grow('allergies', rx.allergies);
+  grow('complaints', rx.complaints);
+  grow('history', rx.history);
+  grow('findings', rx.findings);
+  grow('investigations', rx.investigations);
+  meds.forEach(m => {
+    grow('dosages', m.dose);
+    grow('frequencies', m.freq);
+    grow('durations', m.dur);
+    grow('instructions', m.instr);
+  });
+  if (rxListsChanged) {
+    localStorage.setItem('smilehub_rxlists', JSON.stringify(RX_LISTS));
+    syncSheetField('CLINIC_SETTINGS', 'Rx Lists JSON', JSON.stringify(RX_LISTS));
+  }
 
   if (!PRESCRIPTIONS[mr]) PRESCRIPTIONS[mr] = [];
   PRESCRIPTIONS[mr].push(rx);
@@ -4267,7 +4410,7 @@ async function botConfirmYes() {
           if (!d.success) console.warn('Sheet append failed:', d.error);
         } catch(e) { console.error('Sheet append error:', e); }
       }
-      addBotMessage('bot', ok ? 'Booked ' + action.name + ' with ' + action.doctor + ' — ' + botDateLabel(action.dateStr) + '.' : 'Could not add to Google Calendar: ' + (result.error||'unknown error') + '. Nothing was booked — please try again or use the booking form.');
+      addBotMessage('bot', ok ? 'Booked ' + action.name + ' with ' + action.doctor + ' — ' + botDateLabel(action.dateStr) + '.' : (result.isAuthError ? 'Your sign-in session has expired — please refresh the page and sign in again, then try booking once more.' : 'Could not add to Google Calendar: ' + (result.error||'unknown error') + '. Nothing was booked — please try again or use the booking form.'));
       if (ok) await initApp();
     }
     else if (action.type === 'payment') {
@@ -4539,6 +4682,7 @@ async function bookAppt() {
   }
 
   if(calOk){alert(`✅ Appointment booked for ${name}!${!existing?' New patient registered.':''}${selectedTreats.length?' Treatment plan updated.':''}`); await initApp(); go('home');}
+  else if (calResult.isAuthError) alert('⚠ Your sign-in session has expired.\n\nNothing was booked — please refresh the page and sign in again, then try booking once more.');
   else alert('⚠ Could not add to Google Calendar: ' + (calResult.error||'unknown error') + '\n\nNothing was booked — please try again, or check that this account has edit access to ' + doctor + '\'s calendar.');
 }
 
